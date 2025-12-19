@@ -1,0 +1,426 @@
+from __future__ import annotations
+from typing import Iterator, Literal, Iterable, Callable, TypeVar, Collection
+from fastapi import HTTPException
+from server.payloads import CohereChatV1Request, CohereChatV2Request
+from pydantic import BaseModel
+
+import cohere
+import json
+from fastapi.responses import StreamingResponse
+from cohere import StreamedChatResponse, StreamedChatResponseV2
+from cohere.core.api_error import ApiError
+from cohere.base_client import OMIT
+from cohere.v2.types.v2chat_stream_response import V2ChatStreamResponse
+
+import ast
+import logging
+import sys
+from icecream import ic
+from logging import Logger
+
+from server.generic_service import create_generation_id
+from resources.environment import Environment
+
+
+T = TypeVar('T')
+
+
+class CohereLogger(Logger):
+    instance: CohereLogger | None = None
+
+    def __init__(self):
+        super().__init__(__name__, level=logging.INFO)
+        logging.basicConfig(
+            stream=sys.stdout, 
+            level=logging.INFO,
+        )
+
+    @classmethod
+    def get_instance(cls) -> CohereLogger:
+        if cls.instance is None:
+            cls.instance = cls()
+        return cls.instance
+
+
+def parse_expression(expression: str) -> dict | list | str:
+    """Parse a JSON-like expression into a Python dictionary or list."""
+    try:
+        # Convert the expression to a JSON object
+        parsed_expression = json.loads(expression)
+        return parsed_expression
+    except json.JSONDecodeError as e1:
+        # If the expression is not in JSON format, return it as a string
+        try:
+            parsed_expression = ast.literal_eval(expression)
+            return parsed_expression
+        except (SyntaxError, ValueError) as e2:
+            # If the expression is not a valid Python literal, return it as a string
+            CohereLogger.get_instance().info(f"Failed to parse expression: {expression}")
+        return expression
+
+
+def generate_v1_style_response_json_strings(
+    chunked_message: Iterable[str],
+    generation_id: str | None = None,
+    send_stream_start: bool = True,
+    finished_reason: Literal[
+            "COMPLETE", "STOP_SEQUENCE", "ERROR", "ERROR_TOXIC", "ERROR_LIMIT", "USER_CANCEL", "MAX_TOKENS"
+        ] = "COMPLETE",
+    debug_do_ic: bool = False,
+):
+    if generation_id is None:
+        generation_id = create_generation_id()
+    if send_stream_start:
+        stream_start = dict(
+            event_type='stream-start',
+            generation_id=generation_id,
+            is_finished=False,
+        )
+        if debug_do_ic:
+            ic(stream_start)
+        yield StreamingResponseHTTPExceptionDispatcher._stringify_v1(stream_start)
+
+    emitted_chunks: list[str] = []
+    for chunk in chunked_message:
+        text_generation = dict(
+            event_type='text-generation',
+            text=chunk,
+            is_finished=False,
+        )
+        emitted_chunks.append(chunk)
+        if debug_do_ic:
+            ic(text_generation)
+        yield StreamingResponseHTTPExceptionDispatcher._stringify_v1(text_generation)
+
+    stream_end = dict(
+        event_type="stream-end",
+        finish_reason=finished_reason,
+        generation_id=generation_id,
+        response=dict(
+            text="".join(emitted_chunks),
+            finish_reason=finished_reason,
+        ),
+        is_finished=True,
+    )
+    if debug_do_ic:
+        ic(stream_end)
+    yield StreamingResponseHTTPExceptionDispatcher._stringify_v1(stream_end)
+
+
+def generate_v2_style_response_json_strings(
+    chunked_message: Iterable[str],
+    generation_id: str | None = None,
+    send_stream_start: bool = True,
+    finished_reason: Literal[
+            "COMPLETE", "STOP_SEQUENCE", "MAX_TOKENS", "TOOL_CALL", "ERROR",
+        ] = "COMPLETE",
+    debug_do_ic: bool = False,
+):
+    if generation_id is None:
+        generation_id = create_generation_id()
+    if send_stream_start:
+        message_start = dict(
+            type='message-start',
+            generation_id=generation_id,
+            delta=dict(
+                message=dict(
+                    role='assistant',
+                    content=[],
+                    tool_plan='',
+                    tool_calls=[],
+                    citations=[],
+                ),
+            ),
+        )
+        content_start = dict(
+            type='content-start',
+            index=0,
+            delta=dict(
+                message=dict(
+                    content=dict(
+                        text='',
+                        type='text',
+                    ),
+                ),
+            ),
+        )
+        if debug_do_ic:
+            ic(message_start)
+            ic(content_start)
+        yield StreamingResponseHTTPExceptionDispatcher._stringify_v2(message_start)
+        yield StreamingResponseHTTPExceptionDispatcher._stringify_v2(content_start)
+
+    emitted_chunks: list[str] = []
+    for chunk in chunked_message:
+        content_delta = dict(
+            type='content-delta',
+            index=0,
+            delta=dict(
+                message=dict(
+                    content=dict(
+                        text=chunk,
+                        type='text',
+                    ),
+                ),
+            ),
+        )
+        emitted_chunks.append(chunk)
+        if debug_do_ic:
+            ic(content_delta)
+        yield StreamingResponseHTTPExceptionDispatcher._stringify_v2(content_delta)
+
+    content_end = dict(
+        type='content-end',
+        index=0,
+    )
+    message_end = dict(
+        type="message-end",
+        delta=dict(
+            finished_reason=finished_reason,
+            usage=dict(
+                billed_units=dict(
+                    input_tokens=25,
+                    output_tokens=114,
+                ),
+                tokens=dict(
+                    input_tokens=1,
+                    output_tokens=sum(map(lambda a_chunk: len(a_chunk.split()), emitted_chunks)),
+                ),
+            ),
+        ),
+    )
+    if debug_do_ic:
+        ic(message_end)
+    yield StreamingResponseHTTPExceptionDispatcher._stringify_v2(message_end)
+
+
+def generate_stream_response(
+    response: Iterator[StreamedChatResponse],
+    api_version: Literal["v1", "v2"],
+):
+    CohereLogger.get_instance().info(f"type response of generator: {response}")
+
+    if api_version not in ["v1", "v2"]:
+        raise ValueError(f"Invalid API version: {api_version}. Expected 'v1' or 'v2'.")
+
+    # responseが未評価の場合、ここで例外が発生するのでこちらでも例外処理
+    try:
+        generation_id_in_stream_start: str | None = None
+        for piece in response:
+            CohereLogger.get_instance().info(f"Received piece: {piece}")
+            if api_version == 'v1':
+                if piece.event_type == 'stream-start':
+                    generation_id_in_stream_start = piece.generation_id or ""
+            else:
+                if piece.type == 'message-start':
+                    generation_id_in_stream_start = piece.id or ""
+            yield f"{piece.model_dump_json()}\n"
+    except ApiError as e:
+        # Fast API StreamingResponse中に200以外で返すことはできないので下記で返却
+        # 必要があれば下記のカスタマイズができないか試行
+        # https://github.com/fastapi/fastapi/discussions/10138
+        # yield JSONResponse(status_code=e.status_code, content=e.body)
+        if isinstance(e.body, str):
+            parsed_message = parse_expression(str(e.body))
+        else:
+            parsed_message = e.body
+        if isinstance (parsed_message, dict):
+            response = parsed_message
+        else:
+            response = {"message": parsed_message}
+        if "statusCode" not in response:
+            response["statusCode"] = e.status_code
+
+        generate_response_json_strings = (
+            generate_v1_style_response_json_strings if api_version == "v1" else
+            generate_v2_style_response_json_strings
+        )
+
+        yield from generate_response_json_strings(
+            chunked_message=[str(response.get('message')) or 'An error occurred.'],
+            generation_id=generation_id_in_stream_start,
+            send_stream_start=generation_id_in_stream_start is not None,
+            finished_reason="ERROR",
+        )
+
+
+T2 = TypeVar('T2')
+T3 = TypeVar('T3')
+E = TypeVar('E', bound=Exception)
+
+def get_wrapper_after_getting_first_item_successfully(
+    responses: Iterable[T],
+    exception_type_to_catch: type[E],
+    wrapper_in_case_of_success: Callable[[Iterable[T]], T2],
+    wrapper_in_case_of_exception: Callable[[E], T3] | None = None,
+) -> T2:
+    one_time_sequence = (item for item in responses)
+    try:
+        try:
+            first_item: T = next(one_time_sequence)
+            have_got_first = True
+        except StopIteration:
+            have_got_first = False
+        def emit():
+            if not have_got_first:
+                return
+            yield first_item
+            yield from one_time_sequence
+
+        return wrapper_in_case_of_success(emit())
+    except exception_type_to_catch as e:
+        raise wrapper_in_case_of_exception(e)
+
+
+class StreamingResponseHTTPExceptionDispatcher:
+    def __init__(
+        self, response: Iterator[BaseModel | dict[str, ...]],
+        api_version: Literal["v1", "v2"],
+        log_to_info: bool = False,
+    ):
+        self.response = response
+        self.generation_id_in_stream_start: str | None = None
+        if api_version not in ("v1", "v2"):
+            raise ValueError(f"Invalid API version: {api_version}. Expected 'v1' or 'v2'.")
+        self._stringify = (
+            self._stringify_v1 if api_version == "v1" else
+            self._stringify_v2
+        )
+        self._set_generation_id = (
+            self._set_generation_id_for_v1 if api_version == "v1" else
+            self._set_generation_id_for_v2
+        )
+        self.log_to_info = log_to_info
+    
+    def _set_generation_id_for_v1(self, piece: StreamedChatResponse):
+        if piece.event_type == 'stream-start':
+            self.generation_id_in_stream_start = piece.generation_id or ""
+
+    def _set_generation_id_for_v2(self, piece: StreamedChatResponseV2):
+        if piece.type == 'message-start':
+            self.generation_id_in_stream_start = piece.id or ""
+
+    @staticmethod
+    def _stringify_v1(a_dict: dict[str, ...]) -> str:
+        return f"{json.dumps(a_dict)}\n"
+
+    @staticmethod
+    def _stringify_v2(a_dict: dict[str, ...]) -> str:
+        return f'event: {a_dict.get("type")}\ndata: {json.dumps(a_dict)}\n\n'
+
+    def _yield_items(self):
+        for piece in self.response:
+            if self.log_to_info:
+                CohereLogger.get_instance().info(f"Received piece: {piece}")
+            self._set_generation_id(piece)
+            # ic(type(piece))
+            # ic(piece.model_dump(exclude_unset=True, exclude_none=True))
+            yield self._stringify(piece.model_dump(exclude_unset=True, exclude_none=True))
+
+    def get_StreamingResponse_or_raise_HTTPException(self):
+        return get_wrapper_after_getting_first_item_successfully(
+            responses=self._yield_items(),
+            exception_type_to_catch=ApiError,
+            wrapper_in_case_of_success=lambda items: StreamingResponse(
+                map(lambda item: item, items),
+                media_type="text/event-stream",
+            ),
+            wrapper_in_case_of_exception=lambda e: HTTPException(
+                status_code=e.status_code,
+                detail=e.body.get('message', 'An error occurred.') if isinstance(e.body, dict) else str(e.body),
+            ),
+        )
+
+
+# OMITType: TypeAlias = type(OMIT)
+
+
+# def omit_if_none(value: T | None) -> T | OMITType:
+#     """Return the value if it is not None, otherwise return OMIT."""
+#     return OMIT if value is None else value
+
+
+def omit_none_values(param: BaseModel, keys_to_exclude: Collection[str] | None = None) -> dict[str, ...]:
+    """Return a new dictionary with None values omitted."""
+    keys_to_exclude = set() if keys_to_exclude is None else keys_to_exclude
+    return {
+        key: value for key, value in param.model_dump().items()
+        if value is not None and value is not OMIT and key not in keys_to_exclude
+    }
+
+
+# Cohere V1 Chat API Spec
+# https://docs.cohere.com/v1/reference/chat
+def cohere_chat_v1_stream(
+    request: CohereChatV1Request,
+    api_key: str | None = None,
+    x_client_name: str | None = None,
+    accepts: str = "text/event-stream",
+) -> Iterator[StreamedChatResponse]:
+
+    client = cohere.Client(api_key=api_key, base_url=Environment.get_instance().cohere_url)
+
+    # StreamedChatResponseのイテレータを生成
+    response_iterator: Iterator[StreamedChatResponse] = client.chat_stream(
+        model=request.model or "command-r-plus-fujitsu",
+        message=request.message,
+        chat_history=request.chat_history or OMIT,
+        accepts=accepts,
+        preamble=request.preamble or OMIT,
+        conversation_id=request.conversation_id or OMIT,
+        # Noneでは例外が発生するので、chat_streamメソッドのデフォルト引数のOMITを利用 -> デフォルト引数のOMITを渡せば問題ない
+        # UnprocessableEntityError(
+        # cohere.errors.unprocessable_entity_error.UnprocessableEntityError: status_code: 422, body: {'message': "unrecognized prompt truncation mode ''. For proper usage, please refer to https://docs.cohere.com/v1/reference/chat"}
+        prompt_truncation=request.prompt_truncation or OMIT,
+        connectors=request.connectors or OMIT,
+        search_queries_only=request.search_queries_only or OMIT,
+        documents=request.documents or OMIT,
+        citation_quality=request.citation_quality or OMIT,
+        temperature=request.temperature or OMIT,
+        max_tokens=request.max_tokens or OMIT,
+        max_input_tokens=request.max_input_tokens or OMIT,
+        k=request.k or OMIT,
+        p=request.p or OMIT,
+        seed=request.seed or OMIT,
+        stop_sequences=request.stop_sequences or OMIT,
+        frequency_penalty=request.frequency_penalty or OMIT,
+        presence_penalty=request.presence_penalty or OMIT,
+        tools=request.tools or OMIT,
+        tool_results=request.tool_results or OMIT,
+        force_single_step=request.force_single_step or OMIT,
+        # 下記のオプションはNone Typeで落ちるので一時的にコメントアウト
+        # -> デフォルト引数のOMITでも落ちるので、このオプションが利用されるときは修正
+        # File "/home/stratus/git-under/fre_pj_2025/for_dev/guardrails/venv/lib/python3.11/site-packages/cohere/client.py", line 95, in check_kwarg
+        # return deprecated_kwarg in kwargs
+        # response_format=cohereChatV1Request.response_format or OMIT,
+        safety_mode=request.safety_mode or OMIT, 
+    )
+    
+    
+    return response_iterator
+    
+def cohere_chat_v2_stream(
+    request: CohereChatV2Request,
+    api_key: str | None = None,
+    x_client_name: str | None = None,
+    accepts: str = "text/event-stream",
+) -> Iterator[V2ChatStreamResponse]:
+
+    message: str | None = None
+    if len(request.messages) > 0 and isinstance(request.messages[-1], dict):
+        content = request.messages[-1].get('content')
+        if isinstance(content, str):
+            message = content
+        elif isinstance(content, list):
+            message = "\n".join(
+                item.text for item in content
+                if hasattr(item, 'text') and hasattr(item, 'type') and item.type == 'text'
+            )
+
+    client = cohere.ClientV2(api_key=api_key, base_url=Environment.get_instance().cohere_url)
+
+    # StreamedChatResponseのイテレータを生成
+    response_iterator: Iterator[StreamedChatResponse] = client.chat_stream(
+        **omit_none_values(request, keys_to_exclude=('stream',))
+    )
+    return response_iterator
