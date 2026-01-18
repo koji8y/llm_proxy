@@ -362,15 +362,12 @@ def cohere_chat_v1_stream(
 
     # StreamedChatResponseのイテレータを生成
     response_iterator: Iterator[StreamedChatResponse] = client.chat_stream(
-        model=request.model or "command-r-plus-fujitsu",
+        model=request.model or "command-a-plus",
         message=request.message,
         chat_history=request.chat_history or OMIT,
         accepts=accepts,
         preamble=request.preamble or OMIT,
         conversation_id=request.conversation_id or OMIT,
-        # Noneでは例外が発生するので、chat_streamメソッドのデフォルト引数のOMITを利用 -> デフォルト引数のOMITを渡せば問題ない
-        # UnprocessableEntityError(
-        # cohere.errors.unprocessable_entity_error.UnprocessableEntityError: status_code: 422, body: {'message': "unrecognized prompt truncation mode ''. For proper usage, please refer to https://docs.cohere.com/v1/reference/chat"}
         prompt_truncation=request.prompt_truncation or OMIT,
         connectors=request.connectors or OMIT,
         search_queries_only=request.search_queries_only or OMIT,

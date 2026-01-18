@@ -68,6 +68,8 @@ async def cohere_v1_chat(
             ), api_version="v1")
             return dispatcher.get_StreamingResponse_or_raise_HTTPException()
         except Exception as exp:  # TODO: should shrink the range from general Exception
+            if 'block' not in exp.__class__.__name__.lower():
+                raise
             generation_id = create_generation_id()
 
             if Environment.get_instance().raise_4xx_when_blocked:
@@ -125,7 +127,9 @@ async def cohere_v2_chat(
                 accepts=accepts,
             ), api_version="v2")
             return dispatcher.get_StreamingResponse_or_raise_HTTPException()
-        except GuardrailsBlockException as guardrails_block_exp:
+        except Exception as guardrails_block_exp:
+            if 'block' not in exp.__class__.__name__.lower():
+                raise
             generation_id = create_generation_id()
 
             if Environment.get_instance().raise_4xx_when_blocked:
