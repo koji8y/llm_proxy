@@ -1,7 +1,7 @@
 from __future__ import annotations
 from typing import Iterator, Literal, Iterable, Callable, TypeVar, Collection
 from fastapi import HTTPException
-from server.payloads import CohereChatV1Request, CohereChatV2Request
+from server.payloads import CohereChatV1StreamRequest, CohereChatV1NonStreamRequest, CohereChatV2Request
 from pydantic import BaseModel
 
 import cohere
@@ -15,7 +15,6 @@ from cohere.v2.types.v2chat_stream_response import V2ChatStreamResponse
 import ast
 import logging
 import sys
-from icecream import ic
 from logging import Logger
 
 from server.generic_service import create_generation_id
@@ -352,7 +351,7 @@ def omit_none_values(param: BaseModel, keys_to_exclude: Collection[str] | None =
 # Cohere V1 Chat API Spec
 # https://docs.cohere.com/v1/reference/chat
 def cohere_chat_v1_stream(
-    request: CohereChatV1Request,
+    request: CohereChatV1StreamRequest,
     api_key: str | None = None,
     x_client_name: str | None = None,
     accepts: str = "text/event-stream",
@@ -396,6 +395,62 @@ def cohere_chat_v1_stream(
     
     return response_iterator
     
+
+def cohere_chat_v1_non_stream(
+    request: CohereChatV1NonStreamRequest,
+    api_key: str | None = None,
+    x_client_name: str | None = None,
+    accepts: str = "application/json",
+):
+    client = cohere.Client(api_key=api_key, base_url=Environment.get_instance().cohere_url)
+    if isinstance(request, CohereChatV1StreamRequest):
+        request = CohereChatV1NonStreamRequest.model_validate(
+            request.model_dump(exclude_unset=True, exclude_defaults=True),
+            strict=False,
+            extra='ignore',
+        )
+
+    additional_args = {}
+    if 'response_format' in request.model_dump(exclude_unset=True):
+        additional_args['response_format'] = request.response_format
+
+    try:
+        response: cohere.NonStreamedChatResponse = client.chat(
+            message=request.message,
+            accepts=accepts or request.accepts or None,
+            model=request.model or OMIT,
+            preamble=request.preamble or OMIT,
+            chat_history=request.chat_history or OMIT,
+            conversation_id=request.conversation_id or OMIT,
+            prompt_truncation=request.prompt_truncation or OMIT,
+            connectors=request.connectors or OMIT,
+            search_queries_only=request.search_queries_only or OMIT,
+            documents=request.documents or OMIT,
+            citation_quality=request.citation_quality or OMIT,
+            temperature=request.temperature or OMIT,
+            max_tokens=request.max_tokens or OMIT,
+            max_input_tokens=request.max_input_tokens or OMIT,
+            k=request.k or OMIT,
+            p=request.p or OMIT,
+            seed=request.seed or OMIT,
+            stop_sequences=request.stop_sequences or OMIT,
+            frequency_penalty=request.frequency_penalty or OMIT,
+            presence_penalty=request.presence_penalty or OMIT,
+            raw_prompting=request.raw_prompting or OMIT,
+            tools=request.tools or OMIT,
+            tool_results=request.tool_results or OMIT,
+            force_single_step=request.force_single_step or OMIT,
+            # response_format=request.response_format or OMIT,
+            **additional_args,
+            safety_mode=request.safety_mode or OMIT,
+            request_options=request.request_options or None,
+        )
+    except Exception:
+        import traceback; traceback.print_exc()
+        raise
+    return response
+
+
 def cohere_chat_v2_stream(
     request: CohereChatV2Request,
     api_key: str | None = None,

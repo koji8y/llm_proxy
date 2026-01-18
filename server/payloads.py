@@ -1,9 +1,9 @@
-from pydantic import BaseModel
-from typing import Any, List, Optional, Literal, Union
+from pydantic import BaseModel, Field, ConfigDict
+from typing import Any, List, Optional, Literal, Union, Sequence
 
 
 
-class CohereChatV1Request(BaseModel):
+class CohereChatV1StreamRequest(BaseModel):
     """request for performing chat with Cohere's chat API V1
     
     See https://docs.cohere.com/v1/reference/chat for details.
@@ -35,6 +35,37 @@ class CohereChatV1Request(BaseModel):
     safety_mode: Optional[Literal["CONTEXTUAL", "STRICT", "NONE"]] = "CONTEXTUAL"
 
 
+class CohereChatV1NonStreamRequest(BaseModel):
+    model_config = ConfigDict(extra="ignore")
+    message: str
+    accepts: Optional[Literal["text/event-stream"]] = None
+    model: Optional[str] = None
+    preamble: Optional[str] = None
+    chat_history: Optional[Sequence[dict]] = None  # actual element type is Message
+    conversation_id: Optional[str] = None
+    prompt_truncation: Optional[Union[Literal["OFF", "AUTO", "AUTO_PRESERVE_ORDER"], Any]] = None
+    connectors: Optional[Sequence[dict]] = None # actual element type is ChatConnector
+    search_queries_only: Optional[bool] = None
+    documents: Optional[Sequence[dict[str, str]]] = None # actual element type is ChatDocument
+    citation_quality: Optional[Union[Literal["ENABLED", "DISABLED", "FAST", "ACCURATE", "OFF"], Any]] = None  # actual type is ChatRequestCitationQuality
+    temperature: Optional[float] = None
+    max_tokens: Optional[int] = None
+    max_input_tokens: Optional[int] = None
+    k: Optional[int] = None
+    p: Optional[float] = None
+    seed: Optional[int] = None
+    stop_sequences: Optional[Sequence[str]] = None
+    frequency_penalty: Optional[float] = None
+    presence_penalty: Optional[float] = None
+    raw_prompting: Optional[bool] = Field(default=None)
+    tools: Optional[Sequence[dict]] = None  # acutual element type is Tool
+    tool_results: Optional[Sequence[dict]] = None  # actual element type is ToolResult
+    force_single_step: Optional[bool] = None
+    response_format: Optional[dict] = None  # actual type is ResponseFormat
+    safety_mode: Optional[Union[Literal["CONTEXTUAL", "STRICT", "NONE"], Any]] = None  # actual type is ChatRequestSafetyMode
+    request_options: Optional[dict] = None  # actual type is RequestOptions
+
+
 class CohereChatV1Response(BaseModel):
     """response from Cohere's chat API V1
     
@@ -49,7 +80,7 @@ class CohereChatV1Response(BaseModel):
     search_queries: Optional[List[dict]] = None
     search_results: Optional[List[dict]] = None
     finish_reason: Optional[Literal[
-        "COMPLETE", "STOP_SEQUENCE", "ERROR", "ERROR_TOXIC",
+        "COMPLETE", "STOP_SEQUENCE", "ERROR", "ERROR_TOXIC"
         "ERROR_LIMIT", "USER_CANCEL", "MAX_TOKENS"
     ]] = None
     tool_calls: Optional[List[dict]] = None
