@@ -4,7 +4,7 @@ from fastapi.responses import StreamingResponse
 from server.payloads import (
     CohereChatV1NonStreamRequest,
     CohereChatV1StreamRequest,
-    CohereChatV1Response,
+    # CohereChatV1Response,
     CohereChatV2Request,
     CohereChatV2Response,
 )

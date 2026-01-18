@@ -66,26 +66,26 @@ class CohereChatV1NonStreamRequest(BaseModel):
     request_options: Optional[dict] = None  # actual type is RequestOptions
 
 
-class CohereChatV1Response(BaseModel):
-    """response from Cohere's chat API V1
+# class CohereChatV1Response(BaseModel):
+#     """response from Cohere's chat API V1
     
-    See https://docs.cohere.com/v1/reference/chat for details.
-    """
-    text: str
-    generation_id: Optional[str] = None
-    response_id: Optional[str] = None
-    citations: Optional[List[dict]] = None
-    documents: Optional[list[dict[str, str]]] = None
-    is_search_required: Optional[bool] = None
-    search_queries: Optional[List[dict]] = None
-    search_results: Optional[List[dict]] = None
-    finish_reason: Optional[Literal[
-        "COMPLETE", "STOP_SEQUENCE", "ERROR", "ERROR_TOXIC"
-        "ERROR_LIMIT", "USER_CANCEL", "MAX_TOKENS"
-    ]] = None
-    tool_calls: Optional[List[dict]] = None
-    chat_history: Optional[List[dict]] = None
-    meta: Optional[dict] = None
+#     See https://docs.cohere.com/v1/reference/chat for details.
+#     """
+#     text: str
+#     generation_id: Optional[str] = None
+#     response_id: Optional[str] = None
+#     citations: Optional[List[dict]] = None
+#     documents: Optional[list[dict[str, str]]] = None
+#     is_search_required: Optional[bool] = None
+#     search_queries: Optional[List[dict]] = None
+#     search_results: Optional[List[dict]] = None
+#     finish_reason: Optional[Literal[
+#         "COMPLETE", "STOP_SEQUENCE", "ERROR", "ERROR_TOXIC"
+#         "ERROR_LIMIT", "USER_CANCEL", "MAX_TOKENS"
+#     ]] = None
+#     tool_calls: Optional[List[dict]] = None
+#     chat_history: Optional[List[dict]] = None
+#     meta: Optional[dict] = None
 
 
 class CohereChatV2Request(BaseModel):
