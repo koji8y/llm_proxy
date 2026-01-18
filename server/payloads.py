@@ -115,6 +115,29 @@ class CohereChatV2Request(BaseModel):
     strict_tools: Optional[bool] = None
 
 
+class CohereChatV2NonStreamRequest(BaseModel):
+    model: str
+    messages: list[dict]  # actual element type is ChatMessages
+    tools: Optional[Sequence[dict]] = None  # actual element type is ToolV2
+    strict_tools: Optional[bool] = None
+    documents: Optional[Sequence[Union[str, dict]]] = None  # actual element type is Union[str, Document]
+    citation_options: Optional[dict] = None  # actual type is CitationOptions
+    response_format: Optional[dict] = None  # actual type is ResponseFormatV2
+    safety_mode: Optional[Union[Literal["CONTEXTUAL", "STRICT", "OFF"], Any]] = None  # actual type is V2ChatRequestSafetyMode
+    max_tokens: Optional[int] = None
+    stop_sequences: Optional[Sequence[str]] = None
+    temperature: Optional[float] = None
+    seed: Optional[int] = None
+    frequency_penalty: Optional[float] = None
+    presence_penalty: Optional[float] = None
+    k: Optional[int] = None
+    p: Optional[float] = None
+    logprobs: Optional[bool] = None
+    tool_choice: Optional[Union[Literal["REQUIRED", "NONE"], Any]] = None  # actual type is V2ChatRequestToolChoice
+    thinking: Optional[dict] = None  # actual type is Thinking
+    priority: Optional[int] = None
+    request_options: Optional[dict] = None  # actual type is RequestOptions
+
 class CohereChatV2Response(BaseModel):
     """response from Cohere's chat API V2
     

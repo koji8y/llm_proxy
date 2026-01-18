@@ -13,6 +13,7 @@ from server.cohere_service import (
     cohere_chat_v1_stream,
     cohere_chat_v1_non_stream,
     cohere_chat_v2_stream,
+    cohere_chat_v2_non_stream,
     generate_v1_style_response_json_strings,
     generate_v2_style_response_json_strings,
     StreamingResponseHTTPExceptionDispatcher,
@@ -110,14 +111,15 @@ async def cohere_v1_chat(
             raise
         return response
 
-@app.post("/v2/chat", response_model=CohereChatV2Response)
+@app.post("/v2/chat", response_model=Union[CohereChatV2Response, cohere.V2ChatResponse])
 async def cohere_v2_chat(
     request: CohereChatV2Request,
     authorization: str | None = Header(None),
     ocp_apim_subscription_key: str | None = Header(None),
     accepts: str = Header("text/event-stream"),
     x_client_name: str | None = Header(None),
-) -> StreamingResponse | CohereChatV2Response:
+# ) -> StreamingResponse | CohereChatV2Response:
+) -> cohere.V2ChatResponse | StreamingResponse | CohereChatV2Response:
     if authorization is not None and authorization.lower().startswith("bearer "):
         api_key = authorization[len("bearer "):].strip()
     elif ocp_apim_subscription_key is not None:
@@ -165,10 +167,21 @@ async def cohere_v2_chat(
                     media_type="text/event-stream",
                 )
     else:
-        raise HTTPException(
-            status_code=400,
-            detail="Streaming is required for this endpoint. Please set 'stream' to true in the request."
-        )
+        # raise HTTPException(
+        #     status_code=400,
+        #     detail="Streaming is required for this endpoint. Please set 'stream' to true in the request."
+        # )
+        try:
+            response = cohere_chat_v2_non_stream(
+                request=request,
+                api_key=api_key,
+                x_client_name=x_client_name,
+                accepts=accepts,
+            )
+            return response
+        except Exception:
+            import traceback; traceback.print_exc()
+            raise
 
 @app.get("/ping")
 def pong() -> str:

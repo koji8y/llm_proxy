@@ -476,3 +476,18 @@ def cohere_chat_v2_stream(
         **omit_none_values(request, keys_to_exclude=('stream',))
     )
     return response_iterator
+
+
+def cohere_chat_v2_non_stream(
+    request: CohereChatV2Request,
+    api_key: str | None = None,
+    x_client_name: str | None = None,
+    accepts: str = "application/json",
+) -> cohere.NonStreamedChatResponseV2:
+
+    client = cohere.ClientV2(api_key=api_key, base_url=Environment.get_instance().cohere_url)
+
+    response: cohere.NonStreamedChatResponseV2 = client.chat(
+        **omit_none_values(request, keys_to_exclude=('stream',))
+    )
+    return response
