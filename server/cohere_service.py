@@ -199,50 +199,50 @@ def generate_v2_style_response_json_strings(
     yield StreamingResponseHTTPExceptionDispatcher._stringify_v2(message_end)
 
 
-def generate_stream_response(
-    response: Iterator[StreamedChatResponse],
-    api_version: Literal["v1", "v2"],
-):
-    CohereLogger.get_instance().info(f"type response of generator: {response}")
+# def generate_stream_response(
+#     response: Iterator[StreamedChatResponse],
+#     api_version: Literal["v1", "v2"],
+# ):
+#     CohereLogger.get_instance().info(f"type response of generator: {response}")
 
-    if api_version not in ["v1", "v2"]:
-        raise ValueError(f"Invalid API version: {api_version}. Expected 'v1' or 'v2'.")
+#     if api_version not in ["v1", "v2"]:
+#         raise ValueError(f"Invalid API version: {api_version}. Expected 'v1' or 'v2'.")
 
-    # responseが未評価の場合、ここで例外が発生するのでこちらでも例外処理
-    try:
-        generation_id_in_stream_start: str | None = None
-        for piece in response:
-            CohereLogger.get_instance().info(f"Received piece: {piece}")
-            if api_version == 'v1':
-                if piece.event_type == 'stream-start':
-                    generation_id_in_stream_start = piece.generation_id or ""
-            else:
-                if piece.type == 'message-start':
-                    generation_id_in_stream_start = piece.id or ""
-            yield f"{piece.model_dump_json()}\n"
-    except ApiError as e:
-        if isinstance(e.body, str):
-            parsed_message = parse_expression(str(e.body))
-        else:
-            parsed_message = e.body
-        if isinstance (parsed_message, dict):
-            response = parsed_message
-        else:
-            response = {"message": parsed_message}
-        if "statusCode" not in response:
-            response["statusCode"] = e.status_code
+#     # responseが未評価の場合、ここで例外が発生するのでこちらでも例外処理
+#     try:
+#         generation_id_in_stream_start: str | None = None
+#         for piece in response:
+#             CohereLogger.get_instance().info(f"Received piece: {piece}")
+#             if api_version == 'v1':
+#                 if piece.event_type == 'stream-start':
+#                     generation_id_in_stream_start = piece.generation_id or ""
+#             else:
+#                 if piece.type == 'message-start':
+#                     generation_id_in_stream_start = piece.id or ""
+#             yield f"{piece.model_dump_json()}\n"
+#     except ApiError as e:
+#         if isinstance(e.body, str):
+#             parsed_message = parse_expression(str(e.body))
+#         else:
+#             parsed_message = e.body
+#         if isinstance (parsed_message, dict):
+#             response = parsed_message
+#         else:
+#             response = {"message": parsed_message}
+#         if "statusCode" not in response:
+#             response["statusCode"] = e.status_code
 
-        generate_response_json_strings = (
-            generate_v1_style_response_json_strings if api_version == "v1" else
-            generate_v2_style_response_json_strings
-        )
+#         generate_response_json_strings = (
+#             generate_v1_style_response_json_strings if api_version == "v1" else
+#             generate_v2_style_response_json_strings
+#         )
 
-        yield from generate_response_json_strings(
-            chunked_message=[str(response.get('message')) or 'An error occurred.'],
-            generation_id=generation_id_in_stream_start,
-            send_stream_start=generation_id_in_stream_start is not None,
-            finished_reason="ERROR",
-        )
+#         yield from generate_response_json_strings(
+#             chunked_message=[str(response.get('message')) or 'An error occurred.'],
+#             generation_id=generation_id_in_stream_start,
+#             send_stream_start=generation_id_in_stream_start is not None,
+#             finished_reason="ERROR",
+#         )
 
 
 T2 = TypeVar('T2')
