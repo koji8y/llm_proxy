@@ -221,10 +221,6 @@ def generate_stream_response(
                     generation_id_in_stream_start = piece.id or ""
             yield f"{piece.model_dump_json()}\n"
     except ApiError as e:
-        # Fast API StreamingResponse中に200以外で返すことはできないので下記で返却
-        # 必要があれば下記のカスタマイズができないか試行
-        # https://github.com/fastapi/fastapi/discussions/10138
-        # yield JSONResponse(status_code=e.status_code, content=e.body)
         if isinstance(e.body, str):
             parsed_message = parse_expression(str(e.body))
         else:
@@ -318,6 +314,7 @@ class StreamingResponseHTTPExceptionDispatcher:
             if self.log_to_info:
                 CohereLogger.get_instance().info(f"Received piece: {piece}")
             self._set_generation_id(piece)
+            # from icecream import ic
             # ic(type(piece))
             # ic(piece.model_dump(exclude_unset=True, exclude_none=True))
             yield self._stringify(piece.model_dump(exclude_unset=True, exclude_none=True))

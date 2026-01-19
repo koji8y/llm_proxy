@@ -21,7 +21,6 @@ from server.cohere_service import (
     cohere,
 )
 from resources.environment import Environment
-from icecream import ic
 
 app = FastAPI()
 app.add_exception_handler(Exception, unified_exception_handler)
