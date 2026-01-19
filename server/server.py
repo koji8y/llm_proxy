@@ -144,7 +144,7 @@ async def cohere_v2_chat(
                 accepts=accepts,
             ), api_version="v2")
             return dispatcher.get_StreamingResponse_or_raise_HTTPException()
-        except Exception as guardrails_block_exp:
+        except Exception as exp:
             if 'block' not in exp.__class__.__name__.lower():
                 raise
             generation_id = create_generation_id()
@@ -153,13 +153,13 @@ async def cohere_v2_chat(
                 raise HTTPException(
                     status_code=400,
                     detail={
-                        "message": guardrails_block_exp.body.get('message', 'An error occurred.'),
+                        "message": exp.body.get('message', 'An error occurred.'),
                     }
                 )
             else:
                 return StreamingResponse(
                     generate_v2_style_response_json_strings(
-                        chunked_message=[str(guardrails_block_exp.body.get('message', 'An error occurred.'))],
+                        chunked_message=[str(exp.body.get('message', 'An error occurred.'))],
                         generation_id=generation_id,
                         finished_reason="ERROR",
                         debug_do_ic=True,
