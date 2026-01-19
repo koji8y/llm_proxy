@@ -76,6 +76,7 @@ def generate_v1_style_response_json_strings(
             is_finished=False,
         )
         if debug_do_ic:
+            from icecream import ic
             ic(stream_start)
         yield StreamingResponseHTTPExceptionDispatcher._stringify_v1(stream_start)
 
@@ -88,6 +89,7 @@ def generate_v1_style_response_json_strings(
         )
         emitted_chunks.append(chunk)
         if debug_do_ic:
+            from icecream import ic
             ic(text_generation)
         yield StreamingResponseHTTPExceptionDispatcher._stringify_v1(text_generation)
 
@@ -102,6 +104,7 @@ def generate_v1_style_response_json_strings(
         is_finished=True,
     )
     if debug_do_ic:
+        from icecream import ic
         ic(stream_end)
     yield StreamingResponseHTTPExceptionDispatcher._stringify_v1(stream_end)
 
@@ -144,6 +147,7 @@ def generate_v2_style_response_json_strings(
             ),
         )
         if debug_do_ic:
+            from icecream import ic
             ic(message_start)
             ic(content_start)
         yield StreamingResponseHTTPExceptionDispatcher._stringify_v2(message_start)
@@ -165,6 +169,7 @@ def generate_v2_style_response_json_strings(
         )
         emitted_chunks.append(chunk)
         if debug_do_ic:
+            from icecream import ic
             ic(content_delta)
         yield StreamingResponseHTTPExceptionDispatcher._stringify_v2(content_delta)
 
@@ -189,6 +194,7 @@ def generate_v2_style_response_json_strings(
         ),
     )
     if debug_do_ic:
+        from icecream import ic
         ic(message_end)
     yield StreamingResponseHTTPExceptionDispatcher._stringify_v2(message_end)
 
