@@ -1,0 +1,10 @@
+{
+    "model": "${model}",
+    "messages": [
+        {
+            "role": "user",
+            "content": "${message}"
+        }
+    ],
+    "stream": ${stream}
+}
