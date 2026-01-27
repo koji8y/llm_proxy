@@ -41,21 +41,21 @@ class CohereLogger(Logger):
         return cls.instance
 
 
-def parse_expression(expression: str) -> dict | list | str:
-    """Parse a JSON-like expression into a Python dictionary or list."""
-    try:
-        # Convert the expression to a JSON object
-        parsed_expression = json.loads(expression)
-        return parsed_expression
-    except json.JSONDecodeError as e1:
-        # If the expression is not in JSON format, return it as a string
-        try:
-            parsed_expression = ast.literal_eval(expression)
-            return parsed_expression
-        except (SyntaxError, ValueError) as e2:
-            # If the expression is not a valid Python literal, return it as a string
-            CohereLogger.get_instance().info(f"Failed to parse expression: {expression}")
-        return expression
+# def parse_expression(expression: str) -> dict | list | str:
+#     """Parse a JSON-like expression into a Python dictionary or list."""
+#     try:
+#         # Convert the expression to a JSON object
+#         parsed_expression = json.loads(expression)
+#         return parsed_expression
+#     except json.JSONDecodeError as e1:
+#         # If the expression is not in JSON format, return it as a string
+#         try:
+#             parsed_expression = ast.literal_eval(expression)
+#             return parsed_expression
+#         except (SyntaxError, ValueError) as e2:
+#             # If the expression is not a valid Python literal, return it as a string
+#             CohereLogger.get_instance().info(f"Failed to parse expression: {expression}")
+#         return expression
 
 
 def generate_v1_style_response_json_strings(
