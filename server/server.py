@@ -1,6 +1,7 @@
 from typing import Iterable, Union
 from fastapi import FastAPI, HTTPException, Header
 from fastapi.responses import StreamingResponse
+from datetime import datetime
 from server.payloads import (
     CohereChatV1NonStreamRequest,
     CohereChatV1StreamRequest,
@@ -42,6 +43,8 @@ async def cohere_v1_chat(
     x_client_name: str | None = Header(None),
 # ) -> StreamingResponse | CohereChatV1Response:
 ) -> cohere.NonStreamedChatResponse | cohere.StreamedChatResponse:
+    if Environment.get_instance().dev_show_incoming_message:
+        print(f'{datetime.now().strftime("%Y-%m-%d %H:%M:%S")} [Cohere V1 Chat] Incoming message: {request.message}')
     # _ready.wait()
     if Environment.get_instance().dev_avoid_accurate_citation_quality and (
         (request.citation_quality is None or request.citation_quality in ["accurate"])
@@ -119,6 +122,9 @@ async def cohere_v2_chat(
     x_client_name: str | None = Header(None),
 # ) -> StreamingResponse | CohereChatV2Response:
 ) -> cohere.V2ChatResponse | StreamingResponse | CohereChatV2Response:
+    if Environment.get_instance().dev_show_incoming_message:
+        LF = '\n'
+        print(f'''{datetime.now().strftime("%Y-%m-%d %H:%M:%S")} [Cohere V2 Chat] Incoming message:{LF}{LF.join(f"{message.get("role", "-")}: {message.get("content", "")}" for message in request.messages)}''')
     if authorization is not None and authorization.lower().startswith("bearer "):
         api_key = authorization[len("bearer "):].strip()
     elif ocp_apim_subscription_key is not None:
