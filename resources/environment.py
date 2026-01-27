@@ -26,6 +26,7 @@ class Environment:
         home = os.environ.get("HOME")
         self.huggingface_config_path: str | None = os.environ.get("HUGGINGFACE_CONFIG_PATH", None if home is None else Path(home, '.cache/huggingface/config')) or None
         self.dev_avoid_accurate_citation_quality: str = os.environ.get("DEV_AVOID_ACCURATE_CITATION_QUALITY", "no").lower() in ['yes', 'true']
+        self.dev_show_incoming_message: bool = (os.environ.get("DEV_SHOW_INCOMING_MESSAGE") or "no").lower() in ['yes', 'true']
 
     _instance: Environment | None = None
 
@@ -45,6 +46,7 @@ class Environment:
                 proxy_log_path=self.proxy_log_path,
                 dev_cohere_api_key=self.dev_cohere_api_key,
                 dev_cohere_logger_level=self.dev_cohere_logger_level,
+                dev_show_incoming_message=self.dev_show_incoming_message,
             ).items()
             if value is not None and value != ""
         }
