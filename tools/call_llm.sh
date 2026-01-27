@@ -46,14 +46,14 @@ if [ -n "${cohere_version}" ]; then
   header_template="${here}/header_cohere_template"
   body_template="${here}/body_coherev${cohere_version}_template"
   path="v${cohere_version}/chat"
-  model="${model:- command-a-03-2025}"
+  model="${model:-command-a-03-2025}"
   base_url="${base_url:-https://api.cohere.com/}"
   key_variable="${key_variable:-CO_API_KEY}"
 elif [ -n "${openai}" ]; then
   header_template="${here}/header_openai_template"
   body_template="${here}/body_openai_template"
   path="v1/chat/completions"
-  model="${model:- gpt-5}"
+  model="${model:-gpt-5}"
   base_url="${base_url:-https://api.openai.com/}"
   key_variable="${key_variable:-OPENAI_API_KEY}"
 else
