@@ -12,7 +12,7 @@ curlh() {
   curl -N --no-progress-meter -D /dev/stderr "$@"
 }
 help_exit() {
-  echo "Usage: $(basename $0) [-s|-n] [-1|-2|-o] [-H path_to_header] [-m message] [-u base_url] [-k key_variable] [-M]"
+  echo "Usage: $(basename $0) [-s|-n] [-1|-2|-o] [-H path_to_header] [-m message] [-u base_url] [-k key_variable] [-M] [-P]"
   echo ''
   echo "  -s: stream"
   echo "  -n: non-stream (default)"
@@ -20,15 +20,10 @@ help_exit() {
   echo "  -2: Cohereversion 2"
   echo "  -o: OpenAI"
   echo "  -M: get models instead of chatting"
+  echo "  -P: preserve temporal file"
   exit 1
 }
-header_path="/tmp/header.$$"
-body_path="/tmp/body.$$"
-clean_up() {
-  rm -f "${header_path}" "${body_path}"
-}
-trap clean_up 0 2 9 15
-while getopts "sn12oH:u:k:Mh" opt; do case "${opt}" in
+while getopts "sn12oH:u:k:MPh" opt; do case "${opt}" in
   s) stream=true ;;
   n) stream=false ;;
   1) cohere_version=1 ;;
@@ -39,8 +34,20 @@ while getopts "sn12oH:u:k:Mh" opt; do case "${opt}" in
   u) base_url="${OPTARG}" ;;
   k) key_variable="${OPTARG}" ;;
   M) get_models=yes ;;
+  P) preserve_tmp=true ;;
   h|\?) help_exit ;;
 esac; done
+
+header_path="/tmp/header.$$"
+body_path="/tmp/body.$$"
+
+clean_up() {
+  case "${preserve_tmp}" in
+    true) ;;
+    *) rm -f "${header_path}" "${body_path}" ;;
+  esac
+}
+trap clean_up 0 2 9 15
 
 if [ -n "${cohere_version}" ]; then
   header_template="${here}/header_cohere_template"
