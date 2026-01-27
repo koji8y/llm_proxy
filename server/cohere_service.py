@@ -448,8 +448,9 @@ def cohere_chat_v1_non_stream(
             safety_mode=request.safety_mode or OMIT,
             request_options=request.request_options or None,
         )
-    except Exception:
-        import traceback; traceback.print_exc()
+    except Exception as exp:
+        print(str(exp))
+        # import traceback; traceback.print_exc()
         raise
     return response
 
