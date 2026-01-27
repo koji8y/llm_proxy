@@ -50,7 +50,7 @@ clean_up() {
 trap clean_up 0 2 9 15
 
 if [ -n "${cohere_version}" ]; then
-  header_template="${here}/header_cohere_template"
+  header_template="${here}/${HEADER_COHERE_TEMPLATE:-header_cohere_template}"
   body_template="${here}/body_coherev${cohere_version}_template"
   path="v${cohere_version}/chat"
   model="${model:-command-a-03-2025}"
@@ -84,6 +84,11 @@ if [ -n "${get_models}" ]; then
   path="${path%/}"
   path="${path%/completions}"
   path="${path%/chat}/models"
+  if [ -n "${COHERE_LIST_MODEL_WO_VERSION}" ]; then
+    if [ -n "${cohere_version}" ]; then
+      path="$(echo "${path}" | sed -e 's:v[12]/::')"
+    fi
+  fi
   # cat "${body_template}" \
   #   | sed -e 's/${model}/'"${model}"'/;s/${message}/'"${message}"'/;s/${stream}/'"${stream}"'/' \
   #   > "${body_path}"
