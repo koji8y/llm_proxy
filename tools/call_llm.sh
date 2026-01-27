@@ -12,18 +12,23 @@ curlh() {
   curl -N --no-progress-meter -D /dev/stderr "$@"
 }
 help_exit() {
-  echo "Usage: $(basename $0) [-s|-n] [-1|-2|-o] [-H path_to_header] [-m message] [-u base_url] [-k key_variable] [-M] [-P]"
+  echo "Usage: $(basename $0) [-s|-n] [-1|-2|-o] [-H path_to_header] [-m message] [-u base_url] [-k key_variable] [-L] [-M model_name] [-P]"
   echo ''
   echo "  -s: stream"
   echo "  -n: non-stream (default)"
   echo "  -1: Cohere version 1 (default)"
   echo "  -2: Cohereversion 2"
   echo "  -o: OpenAI"
-  echo "  -M: get models instead of chatting"
+  echo "  -H: specify the path to the header (not its template)"
+  echo "  -m: specify the message to send"
+  echo "  -u: specify the base URL to the LLM to connect"
+  echo "  -k: speicify the variable name for the API key"
+  echo "  -L: get models instead of chatting"
+  echo "  -M: get the specific model's information instead of chatting"
   echo "  -P: preserve temporal file"
   exit 1
 }
-while getopts "sn12oH:u:k:MPh" opt; do case "${opt}" in
+while getopts "sn12oH:u:k:LM:Ph" opt; do case "${opt}" in
   s) stream=true ;;
   n) stream=false ;;
   1) cohere_version=1 ;;
@@ -33,7 +38,8 @@ while getopts "sn12oH:u:k:MPh" opt; do case "${opt}" in
   m) message="${OPTARG}" ;;
   u) base_url="${OPTARG}" ;;
   k) key_variable="${OPTARG}" ;;
-  M) get_models=yes ;;
+  L) get_models=yes ;;
+  M) target_model="${OPTARG}" ;;
   P) preserve_tmp=true ;;
   h|\?) help_exit ;;
 esac; done
@@ -80,11 +86,11 @@ fi
 echo "[Header:]" 1>&2
 cat "${header_path}" 1>&2
 
-if [ -n "${get_models}" ]; then
+if [ -n "${get_models}" ] || [ -n "${target_model}" ]; then
   path="${path%/}"
   path="${path%/completions}"
-  path="${path%/chat}/models"
-  if [ -n "${COHERE_LIST_MODEL_WO_VERSION}" ]; then
+  path="${path%/chat}/models${target_model+/}${target_model}"
+  if [ -n "${COHERE_LIST_MODEL_WO_VERSION}" ] && [ -z "${target_model}" ]; then
     if [ -n "${cohere_version}" ]; then
       path="$(echo "${path}" | sed -e 's:v[12]/::')"
     fi
