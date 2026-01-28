@@ -11,8 +11,11 @@ curlh() {
   echo "curl $@" 1>&2
   curl -N --no-progress-meter -D /dev/stderr "$@"
 }
+process_lines() {
+  (cat "$@"; echo '') | awk '/^$/ {next} {print}'
+}
 help_exit() {
-  echo "Usage: $(basename $0) [-s|-n] [-1|-2|-c|-o] [-H path_to_header] [-m message] [-u base_url] [-k key_variable] [-L] [-M model_name] [-P]"
+  echo "Usage: $(basename $0) [-s|-n] [-1|-2|-c|-o] [-H path_to_header] [-m message] [-u base_url] [-k key_variable] [-L] [-M model_name] [-P] [-N]"
   echo ''
   echo "  -s: stream"
   echo "  -n: non-stream (default)"
@@ -27,9 +30,10 @@ help_exit() {
   echo "  -L: get models instead of chatting"
   echo "  -M: get the specific model's information instead of chatting"
   echo "  -P: preserve temporal file"
+  echo "  -N: ends with new line and omit empty string line"
   exit 1
 }
-while getopts "sn12coH:u:k:LM:Ph" opt; do case "${opt}" in
+while getopts "sn12coH:u:k:LM:PNh" opt; do case "${opt}" in
   s) stream=true ;;
   n) stream=false ;;
   1) cohere_version=1 ;;
@@ -43,6 +47,7 @@ while getopts "sn12coH:u:k:LM:Ph" opt; do case "${opt}" in
   L) get_models=yes ;;
   M) target_model="${OPTARG}" ;;
   P) preserve_tmp=true ;;
+  N) process_lines=process_lines ;;
   h|\?) help_exit ;;
 esac; done
 
@@ -111,7 +116,7 @@ if [ -n "${get_models}" ] || [ -n "${target_model}" ]; then
   #   > "${body_path}"
   # echo "[Body:]"
   # cat "${body_path}"
-  curlh -X GET -H @${header_path} --url ${base_url}/${path}
+  curlh -X GET -H @${header_path} --url ${base_url}/${path} | ${process_lines:-cat}
   exit 0
 fi
 
@@ -121,4 +126,4 @@ cat "${body_template}" \
 echo "[Body:]" 1>&2
 cat "${body_path}" 1>&2
 
-curlh -X POST --data @${body_path} -H @${header_path} --url ${base_url}/${path}
+#curlh -X POST --data @${body_path} -H @${header_path} --url ${base_url}/${path} | ${process_lines:-cat}
