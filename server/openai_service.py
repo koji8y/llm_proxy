@@ -16,7 +16,7 @@ def try_openai_api():
     client = OpenAI()
 
     completion = client.chat.completions.create(
-        model="gpt-5.2",
+        model="gpt-4o",
         messages=[
             {'role': 'user', 'content': "How to make a pancake?"}
         ]
@@ -29,7 +29,7 @@ def try_openai_api_stream():
     client = OpenAI()
 
     completion = client.chat.completions.create(
-        model="gpt-5.2",
+        model="gpt-4o",
         messages=[
             {'role': 'user', 'content': "How to make a pancake?"}
         ],
@@ -71,7 +71,7 @@ def openai_chat_stream(
     request: OpenAIChatNonStreamingRequest,
     api_key: str | None = None,
     x_client_name: str | None = None,
-    acceepts: str = "text/event-stream",
+    accepts: str = "text/event-stream",
     base_url: str | None = None,
     organization: str | None = None,
     project: str | None = None,

@@ -1,9 +1,11 @@
 from pydantic import BaseModel, Field, ConfigDict
 from typing import Iterable, Union, Optional, Dict, List, Literal, Sequence
 import openai.resources.chat.completions.completions as openai_spec
+import server.compatible_types as compat_spec
 
 
 class OpenAIChatNonStreamingRequest(BaseModel):
+    model_config = ConfigDict(extra="ignore")
     messages: Iterable[openai_spec.ChatCompletionMessageParam]
     model: Union[str, openai_spec.ChatModel]
     audio: Optional[openai_spec.ChatCompletionAudioParam] = None
@@ -41,13 +43,14 @@ class OpenAIChatNonStreamingRequest(BaseModel):
     web_search_options: Optional[openai_spec.completion_create_params.WebSearchOptions] = None
     # Use the following arguments if you need to pass additional parameters to the API that aren't available via kwargs.
     # The extra values given here take precedence over values defined on the client or passed to this method.
-    extra_headers: Optional[openai_spec.Headers | None] = None
+    extra_headers: Optional[compat_spec.OpenAIHeaders | None] = None
     extra_query: Optional[openai_spec.Query | None] = None
     extra_body: Optional[openai_spec.Body | None] = None
-    timeout: float | openai_spec.httpx.Timeout | None | openai_spec.NotGiven = openai_spec.not_given
+    timeout: float | compat_spec.Httpx_Timeout | None = None
 
 
 class OpenAIChatStreamingRequest(BaseModel):
+    model_config = ConfigDict(extra="ignore")
     messages: Iterable[openai_spec.ChatCompletionMessageParam]
     model: Union[str, openai_spec.ChatModel]
     stream: Literal[True]
@@ -85,7 +88,7 @@ class OpenAIChatStreamingRequest(BaseModel):
     web_search_options: Optional[openai_spec.completion_create_params.WebSearchOptions] = None
     # Use the following arguments if you need to pass additional parameters to the API that aren't available via kwargs.
     # The extra values given here take precedence over values defined on the client or passed to this method.
-    extra_headers: Optional[openai_spec.Headers | None] = None
+    extra_headers: Optional[compat_spec.OpenAIHeaders | None] = None
     extra_query: Optional[openai_spec.Query | None] = None
     extra_body: Optional[openai_spec.Body | None] = None
-    timeout: float | openai_spec.httpx.Timeout | None | openai_spec.NotGiven = openai_spec.not_given
+    timeout: float | compat_spec.Httpx_Timeout | None = None

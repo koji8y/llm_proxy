@@ -6,15 +6,15 @@ from pathlib import Path
 dotenv.load_dotenv()
 
 
+
+
 class Environment:
     """
     Environment configuration for the Guardrails service.
     """
     def __init__(self):
-        cohere_url: str | None = os.environ.get("COHERE_URL") or None
-        if cohere_url is not None:
-            cohere_url = cohere_url.rstrip('/') + '/'
-        self.cohere_url = cohere_url
+        self.cohere_url = self._ensure_trailing_slash(os.environ.get("COHERE_URL") or None)
+        self.openai_url = self._ensure_trailing_slash(os.environ.get("OPENAI_URL") or None)
         self.raise_4xx_when_blocked: bool = (os.environ.get("RAISE_4XX_WHEN_BLOCKED") or "yes").lower() in ['yes', 'true']
         self.precheck_api_key: bool = (os.environ.get("PRECHECK_API_KEY") or "no").lower() in ['yes', 'true']
         self.dev_record_time: bool = (os.environ.get("DEV_RECORD_TIME") or "no").lower() in ['yes', 'true']
@@ -41,12 +41,25 @@ class Environment:
             key: value
             for key, value in dict(
                 cohere_url=self.cohere_url,
+                openai_url=self.openai_url,
+                precheck_api_key=self.precheck_api_key,
                 raise_4xx_when_blocked=self.raise_4xx_when_blocked,
                 dev_record_time=self.dev_record_time,
                 proxy_log_path=self.proxy_log_path,
                 dev_cohere_api_key=self.dev_cohere_api_key,
+                dev_source_for_jailbreak_embeddings=self.dev_source_for_jailbreak_embeddings,
                 dev_cohere_logger_level=self.dev_cohere_logger_level,
+                dev_show_sentence_transformers_progress_bar=self.dev_show_sentence_transformers_progress_bar,
+                home=self.home,
+                huggingface_config_path=self.huggingface_config_path,
+                dev_avoid_accurate_citation_quality=self.dev_avoid_accurate_citation_quality,
                 dev_show_incoming_message=self.dev_show_incoming_message,
             ).items()
             if value is not None and value != ""
         }
+
+    @staticmethod
+    def _ensure_trailing_slash(url: str | None) -> str | None:
+        if url is not None:
+            return url.rstrip('/') + '/'
+        return url

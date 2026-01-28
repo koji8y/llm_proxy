@@ -77,7 +77,7 @@ elif [ -n "${openai}" ]; then
       key_variable="${key_variable:-CO_API_KEY}"
       ;;
     *)
-      model="${model:-gpt-5}"
+      model="${model:-gpt-4o}"
       path="v1/chat/completions"
       base_url="${base_url:-https://api.openai.com/}"
       key_variable="${key_variable:-OPENAI_API_KEY}"
