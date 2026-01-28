@@ -17,7 +17,7 @@ from server.cohere_service import (
     cohere_chat_v2_non_stream,
     generate_v1_style_response_json_strings,
     generate_v2_style_response_json_strings,
-    StreamingResponseHTTPExceptionDispatcher,
+    StreamingResponseHTTPExceptionDispatcherForCohere,
     create_generation_id,
     cohere,
 )
@@ -27,7 +27,8 @@ from server.openai_service import (
     OpenAIChatNonStreamingRequest,
     OpenAIChatStreamingRequest,
     openai_chat_stream,
-    generate_openai_style_response_json_strings
+    generate_openai_style_response_json_strings,
+    StreamingResponseHTTPExceptionDispatcherForOpenAI,
 )
 import server.compatible_types as compat_spec
 
@@ -114,13 +115,13 @@ async def openai_chat_completions(
 
     if request.stream:
         try:
-            dispatcher = StreamingResponseHTTPExceptionDispatcher(openai_chat_stream(
+            dispatcher = StreamingResponseHTTPExceptionDispatcherForOpenAI(openai_chat_stream(
                 request=request,
                 api_key=api_key,
                 x_client_name=x_client_name,
                 accepts=accepts,
                 base_url=base_url,
-            ), api_version="openai")
+            ))
             return dispatcher.get_StreamingResponse_or_raise_HTTPException()
         except Exception as exp:  # TODO: should shrink the range from general Exception
             if 'block' not in exp.__class__.__name__.lower():
@@ -197,7 +198,7 @@ async def cohere_v1_chat(
 
     if request.stream:
         try:
-            dispatcher = StreamingResponseHTTPExceptionDispatcher(cohere_chat_v1_stream(
+            dispatcher = StreamingResponseHTTPExceptionDispatcherForCohere(cohere_chat_v1_stream(
                 request=request,
                 api_key=api_key,
                 x_client_name=x_client_name,
@@ -272,7 +273,7 @@ async def cohere_v2_chat(
 
     if request.stream:
         try:
-            dispatcher = StreamingResponseHTTPExceptionDispatcher(cohere_chat_v2_stream(
+            dispatcher = StreamingResponseHTTPExceptionDispatcherForCohere(cohere_chat_v2_stream(
                 request=request,
                 api_key=api_key,
                 x_client_name=x_client_name,
