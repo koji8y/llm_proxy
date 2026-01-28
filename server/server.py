@@ -22,6 +22,13 @@ from server.cohere_service import (
     cohere,
 )
 from resources.environment import Environment
+from server.openai_service import (
+    openai_spec,
+    OpenAIChatNonStreamingRequest,
+    OpenAIChatStreamingRequest,
+    openai_chat_stream,
+    generate_openai_style_response_json_strings
+)
 
 app = FastAPI()
 app.add_exception_handler(Exception, unified_exception_handler)
@@ -32,6 +39,75 @@ def record(chunks: Iterable[any], path):
         for chunk in chunks:
             print(f'[{type(chunk)}]: {chunk}', file=out_file)
             yield chunk
+
+
+@app.post("/v1/chat/completions", response_model=openai_spec.Stream[openai_spec.ChatCompletionChunk])
+async def compatibility_v1_chat_completions(
+    request: Union[OpenAIChatNonStreamingRequest, OpenAIChatStreamingRequest],
+    authorization: str | None = Header(None),
+    accepts: str = Header("text/event-stream"),
+    x_client_name: str | None = Header(None),
+) -> openai_spec.Stream[openai_spec.ChatCompletionChunk]:
+    if authorization is not None and authorization.lower().startswith("bearer "):
+        api_key = authorization[len("bearer "):].strip()
+    elif Environment.get_instance().precheck_api_key:
+        raise HTTPException(
+            status_code=401,
+            detail=(
+                "Access denied due to invalid subscription key. Make sure to provide a valid key for an active subscription. "
+                "Either 'Authorization' header with bearer token is required."
+            )
+        )
+    else:
+        api_key = 'invalid_key'
+
+    if request.stream:
+        try:
+            dispatcher = StreamingResponseHTTPExceptionDispatcher(openai_chat_stream(
+                request=request,
+                api_key=api_key,
+                x_client_name=x_client_name,
+                accepts=accepts,
+            ), api_version="v1")
+            return dispatcher.get_StreamingResponse_or_raise_HTTPException()
+        except Exception as exp:  # TODO: should shrink the range from general Exception
+            if 'block' not in exp.__class__.__name__.lower():
+                raise
+            generation_id = create_generation_id()
+
+            if Environment.get_instance().raise_4xx_when_blocked:
+                raise HTTPException(
+                    status_code=400,
+                    detail={
+                        "message": exp.body.get('message', 'An error occurred.'),
+                    }
+                )
+            else:
+                return StreamingResponse(
+                    generate_openai_style_response_json_strings(
+                        chunked_message=[str(exp.body.get('message', 'An error occurred.'))],
+                        generation_id=generation_id,
+                        finished_reason="ERROR",
+                        debug_do_ic=True,
+                    ),
+                    media_type="text/event-stream",
+                )
+    else:
+        # raise HTTPException(
+        #     status_code=400,
+        #     detail="Streaming is required for this endpoint. Please set 'stream' to true in the request."
+        # )
+        try:
+            response = cohere_chat_v1_non_stream(
+                request=request,
+                api_key=api_key,
+                x_client_name=x_client_name,
+                accepts=accepts,
+            )
+        except Exception:
+            import traceback; traceback.print_exc()
+            raise
+        return response
 
 
 @app.post("/v1/chat", response_model=Union[cohere.NonStreamedChatResponse, cohere.StreamedChatResponse])

@@ -17,6 +17,7 @@ import logging
 import sys
 from logging import Logger
 
+from server.payloads_openai import openai_spec
 from server.generic_service import create_generation_id
 from resources.environment import Environment
 
@@ -276,20 +277,23 @@ def get_wrapper_after_getting_first_item_successfully(
 class StreamingResponseHTTPExceptionDispatcher:
     def __init__(
         self, response: Iterator[BaseModel | dict[str, ...]],
-        api_version: Literal["v1", "v2"],
+        api_version: Literal["v1", "v2", "openai"],
         log_to_info: bool = False,
     ):
         self.response = response
         self.generation_id_in_stream_start: str | None = None
-        if api_version not in ("v1", "v2"):
-            raise ValueError(f"Invalid API version: {api_version}. Expected 'v1' or 'v2'.")
+        api_versions = ("v1", "v2", "openai")
+        if api_version not in api_versions:
+            raise ValueError(f"Invalid API version: {api_version}. Expected 'v1', 'v2', or 'openai'.")
         self._stringify = (
             self._stringify_v1 if api_version == "v1" else
-            self._stringify_v2
+            self._stringify_v2 if api_version == "v2" else
+            self._stringify_openai
         )
         self._set_generation_id = (
             self._set_generation_id_for_v1 if api_version == "v1" else
-            self._set_generation_id_for_v2
+            self._set_generation_id_for_v2 if api_version == "v2" else
+            self._set_generation_id_for_openai
         )
         self.log_to_info = log_to_info
     
@@ -300,6 +304,18 @@ class StreamingResponseHTTPExceptionDispatcher:
     def _set_generation_id_for_v2(self, piece: StreamedChatResponseV2):
         if piece.type == 'message-start':
             self.generation_id_in_stream_start = piece.id or ""
+    
+    def _set_generation_id_for_openai(self, piece: openai_spec.ChatCompletionChunk | dict[str, ...]):
+        if self.generation_id_in_stream_start is not None:
+            return
+        if hasattr(piece, 'model_dump'):
+            piece_dict = piece.model_dump(exclude_unset=True, exclude_none=True)
+        elif isinstance(piece, dict):
+            piece_dict = piece
+        else:
+            piece_dict = {}
+        if 'id' in piece_dict:
+            self.generation_id_in_stream_start = piece_dict.get('id') or ""
 
     @staticmethod
     def _stringify_v1(a_dict: dict[str, ...]) -> str:
@@ -308,6 +324,10 @@ class StreamingResponseHTTPExceptionDispatcher:
     @staticmethod
     def _stringify_v2(a_dict: dict[str, ...]) -> str:
         return f'event: {a_dict.get("type")}\ndata: {json.dumps(a_dict)}\n\n'
+
+    @staticmethod
+    def _stringify_openai(a_dict: dict[str, ...]) -> str:
+        return f'data: {json.dumps(a_dict)}\n\n'
 
     def _yield_items(self):
         for piece in self.response:

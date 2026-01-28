@@ -12,7 +12,7 @@ curlh() {
   curl -N --no-progress-meter -D /dev/stderr "$@"
 }
 help_exit() {
-  echo "Usage: $(basename $0) [-s|-n] [-1|-2|-c|-o] [-H path_to_header] [-m message] [-u base_url] [-k key_variable] [-L] [-M model_name] [-P]"
+  echo "Usage: $(basename $0) [-s|-n] [-1|-2|-c|-o] [-H path_to_header] [-m message] [-u base_url] [-k key_variable] [-w model_name] [-L] [-M model_name] [-P]"
   echo ''
   echo "  -s: stream"
   echo "  -n: non-stream (default)"
@@ -24,12 +24,13 @@ help_exit() {
   echo "  -m: specify the message to send"
   echo "  -u: specify the base URL to the LLM to connect"
   echo "  -k: speicify the variable name for the API key"
+  echo "  -w: use the specific model"
   echo "  -L: get models instead of chatting"
   echo "  -M: get the specific model's information instead of chatting"
   echo "  -P: preserve temporal file"
   exit 1
 }
-while getopts "sn12coH:u:k:LM:Ph" opt; do case "${opt}" in
+while getopts "sn12coH:u:k:w:LM:Ph" opt; do case "${opt}" in
   s) stream=true ;;
   n) stream=false ;;
   1) cohere_version=1 ;;
@@ -40,6 +41,7 @@ while getopts "sn12coH:u:k:LM:Ph" opt; do case "${opt}" in
   m) message="${OPTARG}" ;;
   u) base_url="${OPTARG}" ;;
   k) key_variable="${OPTARG}" ;;
+  w) model="${OPTARG}" ;;
   L) get_models=yes ;;
   M) target_model="${OPTARG}" ;;
   P) preserve_tmp=true ;;
@@ -67,14 +69,15 @@ if [ -n "${cohere_version}" ]; then
 elif [ -n "${openai}" ]; then
   header_template="${here}/header_openai_template"
   body_template="${here}/body_openai_template"
-  model="${model:-gpt-5}"
   case "${openai}" in
     cohere)
+      model="${model:-command-a-03-2025}"
       path="compatibility/v1/chat/completions"
       base_url="${base_url:-https://api.cohere.com/}"
       key_variable="${key_variable:-CO_API_KEY}"
       ;;
     *)
+      model="${model:-gpt-5}"
       path="v1/chat/completions"
       base_url="${base_url:-https://api.openai.com/}"
       key_variable="${key_variable:-OPENAI_API_KEY}"
