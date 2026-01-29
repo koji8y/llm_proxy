@@ -232,7 +232,7 @@ async def cohere_v1_chat(
     x_client_name: str | None = Header(None),
 # ) -> StreamingResponse | CohereChatV1Response:
 ) -> cohere.NonStreamedChatResponse | cohere.StreamedChatResponse:
-    from icecream import ic; ic(request)
+    # from icecream import ic; ic(request)
     if Environment.get_instance().dev_show_incoming_message:
         print(f'{datetime.now().strftime("%Y-%m-%d %H:%M:%S")} [Cohere V1 Chat] Incoming message: {request.message}')
     # _ready.wait()
