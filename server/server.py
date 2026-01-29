@@ -33,7 +33,7 @@ from server.openai_service import (
 )
 import server.compatible_types as compat_spec
 from server import payloads_openai
-from server.func_utils import show_result
+from server.func_utils import show_result_with_control
 
 app = FastAPI()
 app.add_exception_handler(Exception, unified_exception_handler)
@@ -56,7 +56,7 @@ def record(chunks: Iterable[any], path):
     # ]
     response_model=dict,
 )
-@show_result
+@show_result_with_control(to_show=lambda: Environment.get_instance().debug_trace_response)
 async def compatibility_v1_chat_completions(
     request: Union[OpenAIChatNonStreamingRequest, OpenAIChatStreamingRequest],
     authorization: str | None = Header(None),
@@ -98,7 +98,7 @@ async def compatibility_v1_chat_completions(
     #     dict,
     # ]
 )
-@show_result
+@show_result_with_control(to_show=lambda: Environment.get_instance().debug_trace_response)
 async def v1_chat_completions(
     request: Union[OpenAIChatNonStreamingRequest, OpenAIChatStreamingRequest],
     authorization: str | None = Header(None),
@@ -125,7 +125,7 @@ async def v1_chat_completions(
         return result.model_dump(exclude_computed_fields=True, exclude_none=True, exclude_defaults=True, exclude_unset=True)
 
 
-@show_result
+@show_result_with_control(to_show=lambda: Environment.get_instance().debug_trace_response)
 async def openai_chat_completions(
     base_url: str | None,
     request: Union[OpenAIChatNonStreamingRequest, OpenAIChatStreamingRequest],
