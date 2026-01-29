@@ -8,6 +8,7 @@ dependencies = [
     "cohere>=5.20.1",
     "dotenv>=0.9.9",
     "fastapi>=0.125.0",
+    "openai>=2.15.0",
     "uvicorn>=0.38.0",
 ]
 
