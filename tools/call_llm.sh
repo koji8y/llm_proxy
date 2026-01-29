@@ -129,4 +129,4 @@ cat "${body_template}" \
 echo "[Body:]" 1>&2
 cat "${body_path}" 1>&2
 
-#curlh -X POST --data @${body_path} -H @${header_path} --url ${base_url}/${path} | ${process_lines:-cat}
+curlh -X POST --data @${body_path} -H @${header_path} --url ${base_url}/${path} | ${process_lines:-cat}
