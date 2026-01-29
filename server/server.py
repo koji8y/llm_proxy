@@ -48,12 +48,13 @@ def record(chunks: Iterable[any], path):
 
 @app.post(
     "/compatibility/v1/chat/completions",
-    response_model=Union[
-        compat_spec.OpenAIStream[openai_spec.ChatCompletionChunk],
-        openai_spec.ChatCompletion,
-        payloads_openai.ChatCompletion,
-        dict,
-    ]
+    # response_model=Union[
+    #     compat_spec.OpenAIStream[openai_spec.ChatCompletionChunk],
+    #     openai_spec.ChatCompletion,
+    #     payloads_openai.ChatCompletion,
+    #     dict,
+    # ]
+    response_model=dict,
 )
 @show_result
 async def compatibility_v1_chat_completions(
@@ -61,7 +62,7 @@ async def compatibility_v1_chat_completions(
     authorization: str | None = Header(None),
     accepts: str = Header("text/event-stream"),
     x_client_name: str | None = Header(None),
-) -> openai_spec.Stream[openai_spec.ChatCompletionChunk] | payloads_openai.ChatCompletion:
+) -> openai_spec.Stream[openai_spec.ChatCompletionChunk] | openai_spec.ChatCompletion:
     base_url = Environment._ensure_trailing_slash(
         Environment.get_instance().cohere_url or "https://api.cohere.com/"
     )
@@ -73,7 +74,10 @@ async def compatibility_v1_chat_completions(
         x_client_name=x_client_name,
         base_url=f'{base_url}compatibility/v1',
     )
-    return result
+    if request.stream:
+        return result
+    else:
+        return result.model_dump(exclude_computed_fields=True, exclude_none=True, exclude_defaults=True, exclude_unset=True)
 
 
 @app.post(
