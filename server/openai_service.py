@@ -8,10 +8,12 @@ import json
 # %%
 from openai import OpenAI
 from dotenv import load_dotenv
+from server.func_utils import show_result
 from server.payloads_openai import openai_spec, OpenAIChatNonStreamingRequest, OpenAIChatStreamingRequest
 from server.common_service import StreamingResponseHTTPExceptionDispatcher
 from server.generic_service import create_generation_id
 from openai import APIError
+import server.payloads_openai as payloads
 
 load_dotenv()
 
@@ -126,6 +128,29 @@ def openai_chat_stream(
         )
 
     return reqponse_iterator
+
+
+@show_result
+def openai_chat_non_stream(
+    request: OpenAIChatNonStreamingRequest,
+    api_key: str | None = None,
+    x_client_name: str | None = None,
+    accepts: str = "application/json",
+    base_url: str | None = None,
+    organization: str | None = None,
+    project: str | None = None,
+) -> openai_spec.ChatCompletion:
+# ) -> payloads.ChatCompletion:
+
+    client = OpenAI(api_key=api_key, base_url=base_url, organization=organization, project=project)
+
+    opts = request.model_dump(exclude_defaults=True, exclude_none=True, exclude_unset=True)
+    response = \
+        client.chat.completions.create(
+            **opts,
+        )
+    # from icecream import ic; ic('openai_chat_non_stream', type(response))
+    return response
 
 
 def generate_openai_style_response_json_strings(

@@ -1,6 +1,7 @@
 from pydantic import BaseModel, Field, ConfigDict
 from typing import Iterable, Union, Optional, Dict, List, Literal, Sequence
 import openai.resources.chat.completions.completions as openai_spec
+import openai.types.chat.chat_completion as openai_spec_types
 import server.compatible_types as compat_spec
 
 
@@ -92,3 +93,24 @@ class OpenAIChatStreamingRequest(BaseModel):
     extra_query: Optional[openai_spec.Query | None] = None
     extra_body: Optional[openai_spec.Body | None] = None
     timeout: float | compat_spec.Httpx_Timeout | None = None
+
+
+# Original: openai.typees.chat.chat_completion.Choice
+class Choice(BaseModel):
+    finish_reason: Literal["stop", "length", "tool_calls", "content_filter", "function_call"]
+    index: int
+    logprobs: Optional[openai_spec_types.ChoiceLogprobs] = None
+    # message: openai_spec_types.ChatCompletionMessage
+    message: dict
+
+
+# Original: openai.types.chat.chat_completion.ChatCompletion
+class ChatCompletion(BaseModel):
+    id: str
+    choices: List[Choice]
+    created: int
+    model: str
+    object: Literal["chat.completion"]
+    service_tier: Optional[Literal["auto", "default", "flex", "scale", "priority"]] = None
+    system_fingerprint: Optional[str] = None
+    usage: Optional[openai_spec_types.CompletionUsage] = None

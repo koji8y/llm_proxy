@@ -27,10 +27,13 @@ from server.openai_service import (
     OpenAIChatNonStreamingRequest,
     OpenAIChatStreamingRequest,
     openai_chat_stream,
+    openai_chat_non_stream,
     generate_openai_style_response_json_strings,
     StreamingResponseHTTPExceptionDispatcherForOpenAI,
 )
 import server.compatible_types as compat_spec
+from server import payloads_openai
+from server.func_utils import show_result
 
 app = FastAPI()
 app.add_exception_handler(Exception, unified_exception_handler)
@@ -43,57 +46,93 @@ def record(chunks: Iterable[any], path):
             yield chunk
 
 
-
 @app.post(
     "/compatibility/v1/chat/completions",
-    response_model=Union[compat_spec.OpenAIStream[openai_spec.ChatCompletionChunk], dict]
+    response_model=Union[
+        compat_spec.OpenAIStream[openai_spec.ChatCompletionChunk],
+        openai_spec.ChatCompletion,
+        payloads_openai.ChatCompletion,
+        dict,
+    ]
 )
+@show_result
 async def compatibility_v1_chat_completions(
     request: Union[OpenAIChatNonStreamingRequest, OpenAIChatStreamingRequest],
     authorization: str | None = Header(None),
     accepts: str = Header("text/event-stream"),
     x_client_name: str | None = Header(None),
-) -> openai_spec.Stream[openai_spec.ChatCompletionChunk]:
+) -> openai_spec.Stream[openai_spec.ChatCompletionChunk] | payloads_openai.ChatCompletion:
     base_url = Environment._ensure_trailing_slash(
         Environment.get_instance().cohere_url or "https://api.cohere.com/"
     )
     
-    return await openai_chat_completions(
+    result = await openai_chat_completions(
         request=request,
         authorization=authorization,
         accepts=accepts,
         x_client_name=x_client_name,
         base_url=f'{base_url}compatibility/v1',
     )
+    return result
 
 
 @app.post(
     "/v1/chat/completions",
-    response_model=Union[compat_spec.OpenAIStream[openai_spec.ChatCompletionChunk], dict]
+    # response_model=Union[
+    #     compat_spec.OpenAIStream[openai_spec.ChatCompletionChunk],
+    #     openai_spec.ChatCompletion,
+    # ]
+    # response_model=Union[
+    #     compat_spec.OpenAIStream[openai_spec.ChatCompletionChunk],
+    #     dict,
+    # ]
+    # response_model=None,
+    response_model=dict
+    # response_model=Union[
+    #     compat_spec.OpenAIStream[openai_spec.ChatCompletionChunk],
+    #     payloads_openai.ChatCompletion,
+    #     dict,
+    # ]
 )
+@show_result
 async def v1_chat_completions(
     request: Union[OpenAIChatNonStreamingRequest, OpenAIChatStreamingRequest],
     authorization: str | None = Header(None),
     accepts: str = Header("text/event-stream"),
     x_client_name: str | None = Header(None),
     base_url: str | None = None,
-) -> openai_spec.Stream[openai_spec.ChatCompletionChunk]:
-    return await openai_chat_completions(
+# ) -> openai_spec.Stream[openai_spec.ChatCompletionChunk] | payloads_openai.ChatCompletion:
+) -> openai_spec.Stream[openai_spec.ChatCompletionChunk] | openai_spec.ChatCompletion:
+# ) -> openai_spec.ChatCompletion:
+# ) -> dict:
+# ):
+    result = await openai_chat_completions(
         request=request,
         authorization=authorization,
         accepts=accepts,
         x_client_name=x_client_name,
         base_url=Environment.get_instance().openai_url,
     )
+    # from icecream import ic; ic(30, result)
+    # from icecream import ic; ic('v1_chat_completions', type(result))
+    if request.stream:
+        return result
+    else:
+        return result.model_dump(exclude_computed_fields=True, exclude_none=True, exclude_defaults=True, exclude_unset=True)
 
+
+@show_result
 async def openai_chat_completions(
     base_url: str | None,
     request: Union[OpenAIChatNonStreamingRequest, OpenAIChatStreamingRequest],
     authorization: str | None = Header(None),
     accepts: str = Header("text/event-stream"),
     x_client_name: str | None = Header(None),
-) -> openai_spec.Stream[openai_spec.ChatCompletionChunk]:
-    from icecream import ic; ic(base_url)
+# ) -> openai_spec.Stream[openai_spec.ChatCompletionChunk] | payloads_openai.ChatCompletion:
+) -> openai_spec.Stream[openai_spec.ChatCompletionChunk] | openai_spec.ChatCompletion:
+# ) -> openai_spec.ChatCompletion:
+# ):
+    # from icecream import ic; ic(base_url)
     # from icecream import ic; ic(request.model_dump(exclude_none=True, exclude_unset=True, exclude_defaults=True, exclude_computed_fields=True))
     # # if isinstance(request, dict):
     # #     if request.get('stream', False):
@@ -158,9 +197,25 @@ async def openai_chat_completions(
                 accepts=accepts,
                 base_url=base_url,
             )
+            # from icecream import ic; ic(response)
+            # ic('-', response.model_dump(exclude_none=True, exclude_unset=True, exclude_defaults=True, exclude_computed_fields=True))
+            # response = openai_spec.ChatCompletion.model_validate(
+            #     ic({
+            #         ic(k): ic(vm)
+            #         for k, v in response.model_dump(exclude_none=True, exclude_unset=True, exclude_defaults=True, exclude_computed_fields=True).items()
+            #         if k in ['choices', 'id', 'object', 'created', 'model']
+            #         for vm in [v if k == 'created' else v]
+            #     })
+            # )
+            # ic('a', response)
+            # response = response.model_dump(exclude_computed_fields=True, exclude_none=True, exclude_defaults=True, exclude_unset=True)
+            # response = openai_spec.ChatCompletion.model_validate(response)
         except Exception:
             import traceback; traceback.print_exc()
             raise
+        # response = payloads_openai.ChatCompletion.model_validate(
+        #     response.model_dump(exclude_computed_fields=True, exclude_none=True, exclude_defaults=True, exclude_unset=True)
+        # )
         return response
 
 
@@ -243,6 +298,7 @@ async def cohere_v1_chat(
             import traceback; traceback.print_exc()
             raise
         return response
+
 
 @app.post("/v2/chat", response_model=Union[CohereChatV2Response, cohere.V2ChatResponse])
 async def cohere_v2_chat(

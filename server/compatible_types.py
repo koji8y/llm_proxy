@@ -1,5 +1,5 @@
 from __future__ import annotations
-from typing import Iterable, TypeAlias, Mapping, Union, Optional
+from typing import Iterable, TypeAlias, Mapping, Union, Optional, List, Literal
 from pydantic import BaseModel, Field, ConfigDict
 from httpx._config import TimeoutTypes
 
