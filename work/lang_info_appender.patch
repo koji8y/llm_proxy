@@ -1,0 +1,364 @@
+diff --git a/server/generic_service.py b/server/generic_service.py
+index 27803f8..628ac5d 100644
+--- a/server/generic_service.py
++++ b/server/generic_service.py
+@@ -85,9 +85,20 @@ def check_with_guardrails(
+             )
+         except Exception as exp:
+             print(traceback.format_exc())
+-            guard_result = None
++            guard_result = GuardResult.get_instance_to_indicate_lang(
++                detected_lang=message_lang,
++                validation_result_outcome=message,
++                validation_result_allowed=False,
++                validation_result_error=str(exp),
++                direction=direction,
++            )
+         return blocked, guard_result
+-    return False, None
++    return False, GuardResult.get_instance_to_indicate_lang(
++        detected_lang=message_lang,
++        validation_result_outcome=message,
++        validation_result_allowed=True,
++        direction=direction,
++    )
+ 
+ 
+ def debug_get_validators():
+@@ -475,7 +486,7 @@ class GuardWithLangDetection:
+         lang_check_only: bool = False,
+         # validate_ja_as_well_as_en: bool = False,
+         skip_to_validate_ja: bool = False,
+-    ) -> tuple[bool, GuardResult | None]:
++    ) -> tuple[bool, GuardResult | None, str]:
+         """Validate the prompt with language detection and Guardrails.
+         Returns a tuple (blocked, guard_result).
+         - blocked: bool, whether the prompt is blocked by Guardrails.
+@@ -490,6 +501,7 @@ class GuardWithLangDetection:
+         if dev_record_time is None:
+             dev_record_time = Environment.get_instance().dev_record_time
+ 
++        lang_detected_finally: str = 'undetermined'
+         try:
+             # detected_lang: Duration[LanguageJudgment] = Duration.run_with_time_recording(
+             #     lambda: self.get_genuine_language_for_en_ja(prompt) if validate_ja_as_well_as_en else self.get_genuine_language_improved3(prompt),
+@@ -506,6 +518,7 @@ class GuardWithLangDetection:
+                     blocked = False
+                     validation_result = ValidationResult(outcome=prompt, allowed=True)
+                     guard_result = GuardResult(
++                        detected_lang=lang_detected_finally,
+                         # message=prompt,
+                         validation_result=validation_result,
+                         direction="prompt",
+@@ -566,6 +579,7 @@ class GuardWithLangDetection:
+                 duration.notes_on_value = detected_lang.value
+                 if (blocked or dev_record_time):
+                     guard_result = GuardResult.get_instance(
++                        detected_lang=lang_detected_finally,
+                         # message=prompt,
+                         validation_result=ValidationResult(outcome=prompt, allowed=True),
+                         direction="prompt",
+@@ -593,16 +607,29 @@ class GuardWithLangDetection:
+                             durations=(guard_result.judge_details or {}).values()
+                         )
+                 else:
+-                    guard_result = None
++                    guard_result = GuardResult.get_instance_to_indicate_lang(
++                        detected_lang=lang_detected_finally,
++                        validation_result_outcome=prompt,
++                        validation_result_allowed=True,
++                        direction="prompt",
++                    )
+ 
+         except Exception as e:
+             # 例外が発生した場合は影響を与えないようにする
+             if self.logger:
+                 self.logger.error(f"Guardrails validation exception: {traceback.format_exc()}")
+-            guard_result = None
++            guard_result = GuardResult.get_instance_to_indicate_lang(
++                detected_lang=lang_detected_finally,
++                validation_result_outcome=prompt,
++                validation_result_allowed=False,
++                validation_result_error=str(e),
++                direction="prompt",
++            )
+ 
+         if (blocked or dev_record_time) and guard_result is not None:
+             # guard_result.log(generation_id=f'dummy_{create_generation_id()}')
+             guard_result.log_with(generation_id=f'dummy_{create_generation_id()}', logger=self.logger)
+ 
++        from icecream import ic
++        ic(guard_result)
+         return blocked, guard_result
+diff --git a/server/guard_result_logging.py b/server/guard_result_logging.py
+index 5b4f677..7dffa52 100644
+--- a/server/guard_result_logging.py
++++ b/server/guard_result_logging.py
+@@ -23,6 +23,7 @@ class GuardResult(BaseModel):
+     # decision: Optional[Duration[str]]
+     judge_details: Optional[dict[str, Duration[ValidationResult]]]
+     decision: Optional[Duration[ValidationResult]]
++    detected_lang: Optional[str] = None
+     
+     @classmethod
+     def get_instance(
+@@ -31,7 +32,8 @@ class GuardResult(BaseModel):
+         validation_result: ValidationResult,
+         direction: Literal["prompt", "ans"],
+         # outcomes: dict[str, str]
+-        outcomes: dict[str, Duration[ValidationResult]]
++        outcomes: dict[str, Duration[ValidationResult]],
++        detected_lang: Optional[str],
+     ) -> GuardResult:
+         return cls(
+             # message=message,
+@@ -39,6 +41,29 @@ class GuardResult(BaseModel):
+             direction=direction,
+             judge_details={category: outcome_type for category, outcome_type in outcomes.items() if category != 'Decider'},
+             decision=outcomes.get("Decider"),
++            detected_lang=detected_lang,
++        )
++
++    @classmethod
++    def get_instance_to_indicate_lang(
++        cls,
++        detected_lang: str,
++        direction: Literal["prompt", "ans"],
++        validation_result_outcome: str,
++        validation_result_allowed: bool,
++        validation_result_error: Optional[str] = None,
++    ):
++        validation_result=ValidationResult(
++            outcome=validation_result_outcome,
++            allowed=validation_result_allowed,
++            error=validation_result_error,
++        )
++        return cls(
++            validation_result=validation_result,
++            direction=direction,
++            judge_details=None,
++            decision=Duration(value=validation_result, begin=None, end=None, duration=None),
++            detected_lang=detected_lang,
+         )
+ 
+     def log_with(self, generation_id: str, logger: Logger):
+diff --git a/server/server.py b/server/server.py
+index 537a02b..cc8c67f 100644
+--- a/server/server.py
++++ b/server/server.py
+@@ -1,4 +1,7 @@
+ from typing import Union, Iterable
++import asyncio
++import threading
++import os
+ from fastapi import FastAPI, HTTPException, Header
+ from fastapi.responses import StreamingResponse
+ from server.payloads import (
+@@ -36,6 +39,9 @@ app = FastAPI()
+ app.add_exception_handler(Exception, unified_exception_handler)
+ 
+ 
++async def get_session_str():
++    return f'{asyncio.current_task().get_name()}/{threading.current_thread().name}/{os.getpid()}'
++
+ def wrap_chat_response(ans: str, allowed: bool):
+     return {"model_response": ans, "allowed": allowed}
+ 
+@@ -189,12 +195,19 @@ async def cohere_v1_chat(
+ 
+     if request.stream:
+         try:
+-            dispatcher = StreamingResponseHTTPExceptionDispatcher(takane_chat_v1_stream(
++            stream, additional_info = takane_chat_v1_stream(
+                 request=request,
+                 api_key=api_key,
+                 x_client_name=x_client_name,
+                 accepts=accepts,
+-            ), api_version="v1")
++            )
++            from icecream import ic
++            from datetime import datetime
++            ic(1, additional_info, type(additional_info), len(additional_info or {}))
++            additional_texts = [
++                ic(f'\n{k}: {v} ({datetime.now().isoformat()}) {await get_session_str()}') for k, v in (additional_info or {}).items()
++            ]
++            dispatcher = StreamingResponseHTTPExceptionDispatcher(response=stream, api_version="v1", additional_strings=additional_texts)
+             return dispatcher.get_StreamingResponse_or_raise_HTTPException()
+         except GuardrailsBlockException as guardrails_block_exp:
+             generation_id = create_generation_id()
+@@ -255,12 +268,16 @@ async def cohere_v2_chat(
+ 
+     if request.stream:
+         try:
+-            dispatcher = StreamingResponseHTTPExceptionDispatcher(takane_chat_v2_stream(
++            stream, additional_info = takane_chat_v2_stream(
+                 request=request,
+                 api_key=api_key,
+                 x_client_name=x_client_name,
+                 accepts=accepts,
+-            ), api_version="v2")
++            )
++            additional_texts = [
++                f'\n{k}: {v}' for k, v in (additional_info or {}).items()
++            ]
++            dispatcher = StreamingResponseHTTPExceptionDispatcher(stream, api_version="v2", additional_strings=additional_texts)
+             return dispatcher.get_StreamingResponse_or_raise_HTTPException()
+         except GuardrailsBlockException as guardrails_block_exp:
+             generation_id = create_generation_id()
+diff --git a/server/takane_service.py b/server/takane_service.py
+index 2cb4c70..731aa4c 100644
+--- a/server/takane_service.py
++++ b/server/takane_service.py
+@@ -8,7 +8,15 @@ from pydantic import BaseModel
+ import cohere
+ import json
+ from fastapi.responses import StreamingResponse
+-from cohere import StreamedChatResponse, StreamedChatResponseV2
++from cohere import (
++    ChatContentDeltaEventDelta,
++    ChatContentDeltaEventDeltaMessage,
++    ChatContentDeltaEventDeltaMessageContent,
++    ContentDeltaV2ChatStreamResponse,
++    StreamedChatResponse,
++    StreamedChatResponseV2,
++    TextGenerationStreamedChatResponse
++)
+ from cohere.core.api_error import ApiError
+ from cohere.base_client import OMIT
+ from cohere.v2.types.v2chat_stream_response import V2ChatStreamResponse
+@@ -349,6 +357,7 @@ class StreamingResponseHTTPExceptionDispatcher:
+     def __init__(
+         self, response: Iterator[BaseModel | dict[str, ...]],
+         api_version: Literal["v1", "v2"],
++        additional_strings: list[str] | None = None,
+         log_to_info: bool = False,
+     ):
+         self.response = response
+@@ -363,13 +372,26 @@ class StreamingResponseHTTPExceptionDispatcher:
+             self._set_generation_id_for_v1 if api_version == "v1" else
+             self._set_generation_id_for_v2
+         )
++        self._detect_finishing =(
++            self._detect_finishing_v1 if api_version == "v1" else
++            self._detect_finishing_v2
++        )
++        self._create_intermediate_response = (
++            self._create_intermediate_response_v1 if api_version == "v1" else
++            self._create_intermediate_response_v2
++        )
++        self.additional_string = additional_strings or []
+         self.log_to_info = log_to_info
+     
+     def _set_generation_id_for_v1(self, piece: StreamedChatResponse):
++        if self.generation_id_in_stream_start is not None:
++            return
+         if piece.event_type == 'stream-start':
+             self.generation_id_in_stream_start = piece.generation_id or ""
+ 
+     def _set_generation_id_for_v2(self, piece: StreamedChatResponseV2):
++        if self.generation_id_in_stream_start is not None:
++            return
+         if piece.type == 'message-start':
+             self.generation_id_in_stream_start = piece.id or ""
+ 
+@@ -381,10 +403,59 @@ class StreamingResponseHTTPExceptionDispatcher:
+     def _stringify_v2(a_dict: dict[str, ...]) -> str:
+         return f'event: {a_dict.get("type")}\ndata: {json.dumps(a_dict)}\n\n'
+ 
+-    def _yield_items(self):
++    @staticmethod
++    def _detect_finishing_v1(a_dict: dict[str, ...]) -> bool:
++        if a_dict.get('event_type') == 'stream-end':
++            return True
++        return False
++
++    @staticmethod
++    def _detect_finishing_v2(a_dict: dict[str, ...]) -> bool:
++        if a_dict.get('type') == 'content-end':
++            return True
++        return False
++
++    @staticmethod
++    def _create_intermediate_response_v1(text: str) :
++        return TextGenerationStreamedChatResponse(
++            event_type='text-generation',
++            text=text,
++        )
++
++    @staticmethod
++    def _create_intermediate_response_v2(text: str):
++        return ContentDeltaV2ChatStreamResponse(
++            type='content-delta',
++            delta=ChatContentDeltaEventDelta(
++                message=ChatContentDeltaEventDeltaMessage(
++                    content=ChatContentDeltaEventDeltaMessageContent(
++                        text=text,
++                    )
++                )
++            )
++        )
++
++    def _feed_response(self):
++        added = False
+         for piece in self.response:
++            if not added:
++                piece_dict = (
++                    piece.model_dump(exclude_unset=True, exclude_none=True) if hasattr(piece, 'model_dump') else
++                    piece if isinstance(piece, dict) else
++                    {}
++                )
++                if self._detect_finishing(piece_dict):
++                    from icecream import ic; ic(self.additional_string)
++                    for text in self.additional_string:
++                        intermediate_response = self._create_intermediate_response(text)
++                        yield intermediate_response
++                    added = True
+             if self.log_to_info:
+                 TakaneLogger.get_instance().info(f"Received piece: {piece}")
++            yield piece
++
++    def _yield_items(self):
++        for piece in self._feed_response():
+             self._set_generation_id(piece)
+             # ic(type(piece))
+             # ic(piece.model_dump(exclude_unset=True, exclude_none=True))
+@@ -431,13 +502,14 @@ def takane_chat_v1_stream(
+     api_key: str | None = None,
+     x_client_name: str | None = None,
+     accepts: str = "text/event-stream",
+-) -> Iterator[StreamedChatResponse]:
++) -> tuple[Iterator[StreamedChatResponse], dict | None]:
+ 
+     blocked, guard_result = GuardWithLangDetectionForTakane.get_instance().validate(
+         request.message,
+         api_key=api_key,
+         force_to_perform_all_validators=Environment.get_instance().dev_force_to_perform_all_validators,
+     )
++    from icecream import ic; ic(blocked, guard_result)
+     if Environment.get_instance().debug_tick:
+         LF = '\n'
+         validator_names = sorted(
+@@ -492,14 +564,15 @@ def takane_chat_v1_stream(
+     )
+     
+     
+-    return response_iterator
++    from icecream import ic
++    return response_iterator, ic(dict(detected_lang=guard_result.detected_lang or "(not recorded)") if guard_result is not None else None)
+     
+ def takane_chat_v2_stream(
+     request: CohereChatV2Request,
+     api_key: str | None = None,
+     x_client_name: str | None = None,
+     accepts: str = "text/event-stream",
+-) -> Iterator[V2ChatStreamResponse]:
++) -> tuple[Iterator[V2ChatStreamResponse], dict | None]:
+ 
+     message: str | None = None
+     if len(request.messages) > 0 and isinstance(request.messages[-1], dict):
+@@ -525,4 +598,4 @@ def takane_chat_v2_stream(
+     response_iterator: Iterator[StreamedChatResponse] = client.chat_stream(
+         **omit_none_values(request, keys_to_exclude=('stream',))
+     )
+-    return response_iterator
++    return response_iterator, dict(detected_lang=guard_result.detected_lang or "(not recorded)") if guard_result is not None else None
