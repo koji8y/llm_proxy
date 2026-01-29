@@ -69,7 +69,7 @@ if [ -n "${cohere_version}" ]; then
   body_template="${here}/body_coherev${cohere_version}_template"
   model="${model:-command-a-03-2025}"
   path="v${cohere_version}/chat"
-  base_url="${base_url:-https://api.cohere.com/}"
+  base_url="${base_url:-${COHERE_URL:-https://api.cohere.com/}}"
   key_variable="${key_variable:-CO_API_KEY}"
 elif [ -n "${openai}" ]; then
   header_template="${here}/header_openai_template"
@@ -78,13 +78,13 @@ elif [ -n "${openai}" ]; then
     cohere)
       model="${model:-command-a-03-2025}"
       path="compatibility/v1/chat/completions"
-      base_url="${base_url:-https://api.cohere.com/}"
+      base_url="${base_url:-${COHERE_URL:-https://api.cohere.com/}}"
       key_variable="${key_variable:-CO_API_KEY}"
       ;;
     *)
       model="${model:-gpt-4o}"
       path="v1/chat/completions"
-      base_url="${base_url:-https://api.openai.com/}"
+      base_url="${base_url:-${OPENAI_URL:-https://api.openai.com/}}"
       key_variable="${key_variable:-OPENAI_API_KEY}"
       ;;
   esac
