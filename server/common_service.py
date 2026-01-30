@@ -95,7 +95,7 @@ class StreamingResponseHTTPExceptionDispatcher:
                     {}
                 )
                 if self._detect_finishing(piece_dict):
-                    from icecream import ic; ic(self.additional_string)
+                    # from icecream import ic; ic(self.additional_string)
                     for text in self.additional_string:
                         intermediate_response = self._create_intermediate_response(text)
                         yield intermediate_response
@@ -109,7 +109,7 @@ class StreamingResponseHTTPExceptionDispatcher:
             self._set_generation_id(piece)
             from icecream import ic
             ic(type(piece))
-            ic(piece.model_dump(exclude_unset=True, exclude_none=True))
+            piece_model_dump = piece.model_dump(exclude_unset=True, exclude_none=True); ic(piece_model_dump)
             yield self._stringify(piece.model_dump(exclude_unset=True, exclude_none=True))
 
     def get_StreamingResponse_or_raise_HTTPException(self):

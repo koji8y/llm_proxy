@@ -276,8 +276,9 @@ async def cohere_v1_chat(
                 accepts=accepts,
             )
             additional_texts = [
-                f'\n{k}: {v} ({datetime.now().isoformat()}) {await get_session_str()}' for k, v in (additional_info or {}).items()
+                f'\n{str(k).strip()}: {str(v).strip()} ({datetime.now().isoformat()}) {await get_session_str()}' for k, v in (additional_info or {}).items()
             ]
+            request_model_dump = request.model_dump(exclude_none=True, exclude_unset=True, exclude_defaults=True); from icecream import ic; ic(additional_texts, request_model_dump)
             dispatcher = StreamingResponseHTTPExceptionDispatcherForCohere(response=stream, api_version="v1", additional_strings=additional_texts)
             return dispatcher.get_StreamingResponse_or_raise_HTTPException()
         except Exception as exp:  # TODO: should shrink the range from general Exception
