@@ -7,7 +7,15 @@ from pydantic import BaseModel
 import cohere
 import json
 from fastapi.responses import StreamingResponse
-from cohere import StreamedChatResponse, StreamedChatResponseV2
+from cohere import (
+    ChatContentDeltaEventDelta,
+    ChatContentDeltaEventDeltaMessage,
+    ChatContentDeltaEventDeltaMessageContent,
+    ContentDeltaV2ChatStreamResponse,
+    StreamedChatResponse,
+    StreamedChatResponseV2,
+    TextGenerationStreamedChatResponse
+)
 from cohere.core.api_error import ApiError
 from cohere.base_client import OMIT
 from cohere.v2.types.v2chat_stream_response import V2ChatStreamResponse
@@ -33,12 +41,14 @@ class StreamingResponseHTTPExceptionDispatcherForCohere(StreamingResponseHTTPExc
         response: Iterator[BaseModel | dict[str, ...]],
         api_version: Literal["v1", "v2", "openai"],
         exception_type_to_catch: type[E] = ApiError,
+        additional_strings: list[str] | None = None,
         log_to_info: bool = False,
     ):
         super().__init__(
             response=response,
             exception_type_to_catch=ApiError,
             log_to_info=log_to_info,
+            additional_strings=additional_strings,
         )
         api_versions = ("v1", "v2", "openai")
         if api_version not in api_versions:
@@ -54,12 +64,30 @@ class StreamingResponseHTTPExceptionDispatcherForCohere(StreamingResponseHTTPExc
             self._set_generation_id_for_v2 if api_version == "v2" else
             self._set_generation_id_for_openai
         )
+        self._detect_finishing_proper =(
+            self._detect_finishing_v1 if api_version == "v1" else
+            self._detect_finishing_v2 if api_version == "v2" else
+            self._detect_finishing_openai
+        )
+        self._create_intermediate_response_proper = (
+            self._create_intermediate_response_v1 if api_version == "v1" else
+            self._create_intermediate_response_v2 if api_version == "v2" else
+            self._create_intermediate_response_openai
+        )
 
     def _stringify(self, a_dict: dict[str, ...]) -> str:
         return self._stringify_proper(a_dict)
 
     def _set_generation_id(self, piece: ...):
+        if self.generation_id_in_stream_start is None:
+            return
         return self._set_generation_id_proper(piece)
+
+    def _detect_finishing(self, piece: ...) -> bool:
+        return self._detect_finishing_proper(piece)
+
+    def _create_intermediate_response(self, piece: str):
+        return self._create_intermediate_response_proper(piece)
 
     def _set_generation_id_for_v1(self, piece: StreamedChatResponse):
         if piece.event_type == 'stream-start':
@@ -92,6 +120,38 @@ class StreamingResponseHTTPExceptionDispatcherForCohere(StreamingResponseHTTPExc
     @staticmethod
     def _stringify_openai(a_dict: dict[str, ...]) -> str:
         return f'data: {json.dumps(a_dict)}\n\n'
+
+    @staticmethod
+    def _detect_finishing_v1(a_dict: dict[str, ...]) -> bool:
+        if a_dict.get('event_type') == 'stream-end':
+            return True
+        return False
+
+    @staticmethod
+    def _detect_finishing_v2(a_dict: dict[str, ...]) -> bool:
+        if a_dict.get('type') == 'content-end':
+            return True
+        return False
+
+    @staticmethod
+    def _create_intermediate_response_v1(text: str) :
+        return TextGenerationStreamedChatResponse(
+            event_type='text-generation',
+            text=text,
+        )
+
+    @staticmethod
+    def _create_intermediate_response_v2(text: str):
+        return ContentDeltaV2ChatStreamResponse(
+            type='content-delta',
+            delta=ChatContentDeltaEventDelta(
+                message=ChatContentDeltaEventDeltaMessage(
+                    content=ChatContentDeltaEventDeltaMessageContent(
+                        text=text,
+                    )
+                )
+            )
+        )
 
 
 class CohereLogger(Logger):
@@ -339,7 +399,7 @@ def cohere_chat_v1_stream(
     api_key: str | None = None,
     x_client_name: str | None = None,
     accepts: str = "text/event-stream",
-) -> Iterator[StreamedChatResponse]:
+) -> tuple[Iterator[StreamedChatResponse], dict | None]:
 
     client = cohere.Client(api_key=api_key, base_url=Environment.get_instance().cohere_url)
 
@@ -377,7 +437,8 @@ def cohere_chat_v1_stream(
     )
     
     
-    return response_iterator
+    from datetime import datetime
+    return response_iterator, dict(test=f'{datetime.now().isoformat()}')
     
 
 def cohere_chat_v1_non_stream(
@@ -441,7 +502,7 @@ def cohere_chat_v2_stream(
     api_key: str | None = None,
     x_client_name: str | None = None,
     accepts: str = "text/event-stream",
-) -> Iterator[V2ChatStreamResponse]:
+) -> tuple[Iterator[V2ChatStreamResponse], dict | None]:
 
     message: str | None = None
     if len(request.messages) > 0 and isinstance(request.messages[-1], dict):
@@ -460,7 +521,8 @@ def cohere_chat_v2_stream(
     response_iterator: Iterator[StreamedChatResponse] = client.chat_stream(
         **omit_none_values(request, keys_to_exclude=('stream',))
     )
-    return response_iterator
+    from datetime import datetime
+    return response_iterator, dict(test=f'{datetime.now().isoformat()}')
 
 
 def cohere_chat_v2_non_stream(

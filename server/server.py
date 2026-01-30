@@ -1,4 +1,8 @@
 from typing import Iterable, Union
+import asyncio
+import threading
+import os
+from datetime import datetime
 from fastapi import FastAPI, HTTPException, Header
 from fastapi.responses import StreamingResponse
 from datetime import datetime
@@ -37,6 +41,10 @@ from server.func_utils import show_result_with_control
 
 app = FastAPI()
 app.add_exception_handler(Exception, unified_exception_handler)
+
+
+async def get_session_str():
+    return f'{asyncio.current_task().get_name()}/{threading.current_thread().name}/{os.getpid()}'
 
 
 def record(chunks: Iterable[any], path):
@@ -158,13 +166,17 @@ async def openai_chat_completions(
 
     if request.stream:
         try:
-            dispatcher = StreamingResponseHTTPExceptionDispatcherForOpenAI(openai_chat_stream(
+            stream, additional_info = openai_chat_stream(
                 request=request,
                 api_key=api_key,
                 x_client_name=x_client_name,
                 accepts=accepts,
                 base_url=base_url,
-            ))
+            )
+            additional_texts = [
+                f'\n{k}: {v} ({datetime.now().isoformat()}) {await get_session_str()}' for k, v in (additional_info or {}).items()
+            ]
+            dispatcher = StreamingResponseHTTPExceptionDispatcherForOpenAI(response=stream, additional_strings=additional_texts)
             return dispatcher.get_StreamingResponse_or_raise_HTTPException()
         except Exception as exp:  # TODO: should shrink the range from general Exception
             if 'block' not in exp.__class__.__name__.lower():
@@ -257,12 +269,16 @@ async def cohere_v1_chat(
 
     if request.stream:
         try:
-            dispatcher = StreamingResponseHTTPExceptionDispatcherForCohere(cohere_chat_v1_stream(
+            stream, additional_info = cohere_chat_v1_stream(
                 request=request,
                 api_key=api_key,
                 x_client_name=x_client_name,
                 accepts=accepts,
-            ), api_version="v1")
+            )
+            additional_texts = [
+                f'\n{k}: {v} ({datetime.now().isoformat()}) {await get_session_str()}' for k, v in (additional_info or {}).items()
+            ]
+            dispatcher = StreamingResponseHTTPExceptionDispatcherForCohere(response=stream, api_version="v1", additional_strings=additional_texts)
             return dispatcher.get_StreamingResponse_or_raise_HTTPException()
         except Exception as exp:  # TODO: should shrink the range from general Exception
             if 'block' not in exp.__class__.__name__.lower():
@@ -333,12 +349,16 @@ async def cohere_v2_chat(
 
     if request.stream:
         try:
-            dispatcher = StreamingResponseHTTPExceptionDispatcherForCohere(cohere_chat_v2_stream(
+            stream, additional_info = cohere_chat_v2_stream(
                 request=request,
                 api_key=api_key,
                 x_client_name=x_client_name,
                 accepts=accepts,
-            ), api_version="v2")
+            )
+            additional_texts = [
+                f'\n{k}: {v} ({datetime.now().isoformat()}) {await get_session_str()}' for k, v in (additional_info or {}).items()
+            ]
+            dispatcher = StreamingResponseHTTPExceptionDispatcherForCohere(response=stream, api_version="v2", additional_strings=additional_texts)
             return dispatcher.get_StreamingResponse_or_raise_HTTPException()
         except Exception as exp:
             if 'block' not in exp.__class__.__name__.lower():

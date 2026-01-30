@@ -60,12 +60,14 @@ class StreamingResponseHTTPExceptionDispatcher:
         self,
         response: Iterator[BaseModel | dict[str, ...]],
         exception_type_to_catch: type[E],
+        additional_strings: list[str] | None = None,
         log_to_info: bool = False,
     ):
         self.response = response
         self.generation_id_in_stream_start: str | None = None
         self.exception_type_to_catch = exception_type_to_catch
         self.log_to_info = log_to_info
+        self.additional_string = additional_strings or []
 
     @abstractmethod
     def _set_generation_id(self, piece: ...):
@@ -75,14 +77,39 @@ class StreamingResponseHTTPExceptionDispatcher:
     def _stringify(self, a_dict: dict[str, ...]) -> str:
         ...
 
-    def _yield_items(self):
+    @abstractmethod
+    def _detect_finishing(self, piece: ...) -> bool:
+        ...
+
+    @abstractmethod
+    def _create_intermediate_response(self, piece: str):
+        ...
+
+    def _feed_response(self):
+        added = False
         for piece in self.response:
+            if not added:
+                piece_dict = (
+                    piece.model_dump(exclude_unset=True, exclude_none=True) if hasattr(piece, 'model_dump') else
+                    piece if isinstance(piece, dict) else
+                    {}
+                )
+                if self._detect_finishing(piece_dict):
+                    from icecream import ic; ic(self.additional_string)
+                    for text in self.additional_string:
+                        intermediate_response = self._create_intermediate_response(text)
+                        yield intermediate_response
+                    added = True
+            yield piece
+
+    def _yield_items(self):
+        for piece in self._feed_response():
             if self.log_to_info:
                 CommonServiceLogger.get_instance().info(f"Received piece: {piece}")
             self._set_generation_id(piece)
-            # from icecream import ic
-            # ic(type(piece))
-            # ic(piece.model_dump(exclude_unset=True, exclude_none=True))
+            from icecream import ic
+            ic(type(piece))
+            ic(piece.model_dump(exclude_unset=True, exclude_none=True))
             yield self._stringify(piece.model_dump(exclude_unset=True, exclude_none=True))
 
     def get_StreamingResponse_or_raise_HTTPException(self):
