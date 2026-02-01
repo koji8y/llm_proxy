@@ -9,11 +9,19 @@ import json
 from openai import OpenAI
 from dotenv import load_dotenv
 from server.func_utils import show_result
-from server.payloads_openai import openai_spec, OpenAIChatNonStreamingRequest, OpenAIChatStreamingRequest
+from server.payloads_openai import (
+    openai_spec,
+    openai_spec_types,
+    openai_spec_chunk_types,
+    OpenAIChatNonStreamingRequest,
+    OpenAIChatStreamingRequest
+)
 from server.common_service import StreamingResponseHTTPExceptionDispatcher
 from server.generic_service import create_generation_id
 from openai import APIError
 import server.payloads_openai as payloads
+from resources.environment import Environment
+from server.debug_utils import get_test_info_for_debug
 
 load_dotenv()
 
@@ -80,17 +88,17 @@ class StreamingResponseHTTPExceptionDispatcherForOpenAI(StreamingResponseHTTPExc
         self,
         response: Iterator[BaseModel | dict[str, ...]],
         exception_type_to_catch: type[E] = APIError,
+        additional_strings: list[str] | None = None,
         log_to_info: bool = False,
     ):
         super().__init__(
             response=response,
-            exception_type_to_catch=APIError,
+            exception_type_to_catch=exception_type_to_catch,
             log_to_info=log_to_info,
+            additional_strings=additional_strings,
         )
 
-    def _set_generation_id(self, piece: openai_spec.ChatCompletionChunk | dict[str, ...]):
-        if self.generation_id_in_stream_start is not None:
-            return
+    def _set_generation_id(self, piece: ...):
         if hasattr(piece, 'model_dump'):
             piece_dict = piece.model_dump(exclude_unset=True, exclude_none=True)
         elif isinstance(piece, dict):
@@ -100,13 +108,36 @@ class StreamingResponseHTTPExceptionDispatcherForOpenAI(StreamingResponseHTTPExc
         if 'id' in piece_dict:
             self.generation_id_in_stream_start = piece_dict.get('id') or ""
 
-    def _stringify(self, a_dict: dict[str, ...]) -> str:
-        return self._stringify_proper(a_dict)
-
     @staticmethod
-    def _stringify_proper(a_dict: dict[str, ...]) -> str:
+    def _stringify(a_dict: dict[str, ...]) -> str:
         return f'data: {json.dumps(a_dict)}\n\n'
 
+    # @staticmethod
+    # def _stringify_proper(a_dict: dict[str, ...]) -> str:
+    #     return f'data: {json.dumps(a_dict)}\n\n'
+
+    def _detect_finishing(self, piece: dict[str, ...]) -> bool:
+        return piece.get('choices', {})[0].get('finish_reason')
+
+    def _create_intermediate_response(self, text: str) :
+        # data: {"id":"chatcmpl-D3vIvxav0PfIeUxUu3YsysPuX1iKs","object":"chat.completion.chunk","created":1769827633,"model":"gpt-4o-2024-08-06","service_tier":"default","system_fingerprint":"fp_fa7f5b168b","choices":[{"index":0,"delta":{"content":"As"},"logprobs":null,"finish_reason":null}],"obfuscation":"yckpG2S4psb"}
+        data = openai_spec.ChatCompletionChunk(
+            id=self.generation_id_in_stream_start,
+            object="chat.completion.chunk",
+            choices=[
+                openai_spec_chunk_types.Choice(
+                    delta=openai_spec_chunk_types.ChoiceDelta(
+                        content=text,
+                    ),
+                    index=0,
+                    finish_reason=None,
+                )
+            ],
+            created=0,
+            model="",
+        )
+        # return f'data: {data.model_dump_json(exclude_unset=True, exclude_none=True)}\n\n'
+        return data
 
 def openai_chat_stream(
     request: OpenAIChatNonStreamingRequest,
@@ -117,7 +148,7 @@ def openai_chat_stream(
     organization: str | None = None,
     project: str | None = None,
     # ) -> openai_spec.ChatCompletion:
-) -> openai_spec.Stream[openai_spec.ChatCompletionChunk]:
+) -> tuple[openai_spec.Stream[openai_spec.ChatCompletionChunk], dict | None]:
 
     client = OpenAI(api_key=api_key, base_url=base_url, organization=organization, project=project)
 
@@ -127,7 +158,12 @@ def openai_chat_stream(
             **opts,
         )
 
-    return reqponse_iterator
+    additional_info = (
+        get_test_info_for_debug()
+        if Environment.get_instance().debug_append_test_info else
+        None
+    )
+    return reqponse_iterator, additional_info
 
 
 @show_result

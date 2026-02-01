@@ -28,7 +28,9 @@ from logging import Logger
 from server.payloads_openai import openai_spec
 from server.generic_service import create_generation_id
 from server.common_service import StreamingResponseHTTPExceptionDispatcher
+from server.openai_service import StreamingResponseHTTPExceptionDispatcherForOpenAI
 from resources.environment import Environment
+from server.debug_utils import get_test_info_for_debug
 
 
 T = TypeVar('T')
@@ -46,33 +48,41 @@ class StreamingResponseHTTPExceptionDispatcherForCohere(StreamingResponseHTTPExc
     ):
         super().__init__(
             response=response,
-            exception_type_to_catch=ApiError,
+            exception_type_to_catch=exception_type_to_catch,
             log_to_info=log_to_info,
             additional_strings=additional_strings,
         )
         api_versions = ("v1", "v2", "openai")
         if api_version not in api_versions:
             raise ValueError(f"Invalid API version: {api_version}. Expected 'v1', 'v2', or 'openai'.")
-        self.exception_type_to_catch = exception_type_to_catch
         self._stringify_proper = (
             self._stringify_v1 if api_version == "v1" else
             self._stringify_v2 if api_version == "v2" else
-            self._stringify_openai
+            StreamingResponseHTTPExceptionDispatcherForOpenAI._stringify
         )
         self._set_generation_id_proper = (
             self._set_generation_id_for_v1 if api_version == "v1" else
             self._set_generation_id_for_v2 if api_version == "v2" else
-            self._set_generation_id_for_openai
+            # lambda piece: StreamingResponseHTTPExceptionDispatcherForOpenAI._set_generation_id_for_openai(
+            #     target=self, piece=piece
+            # )
+            lambda piece: StreamingResponseHTTPExceptionDispatcherForOpenAI._set_generation_id(
+                self=self, piece=piece
+            )
         )
         self._detect_finishing_proper =(
             self._detect_finishing_v1 if api_version == "v1" else
             self._detect_finishing_v2 if api_version == "v2" else
-            self._detect_finishing_openai
+            lambda piece: StreamingResponseHTTPExceptionDispatcherForOpenAI._detect_finishing(
+                self=self, piece=piece
+            )
         )
         self._create_intermediate_response_proper = (
             self._create_intermediate_response_v1 if api_version == "v1" else
             self._create_intermediate_response_v2 if api_version == "v2" else
-            self._create_intermediate_response_openai
+            lambda text: StreamingResponseHTTPExceptionDispatcherForOpenAI._create_intermediate_response(
+                text=text
+            )
         )
 
     def _stringify(self, a_dict: dict[str, ...]) -> str:
@@ -83,7 +93,7 @@ class StreamingResponseHTTPExceptionDispatcherForCohere(StreamingResponseHTTPExc
             return
         return self._set_generation_id_proper(piece)
 
-    def _detect_finishing(self, piece: ...) -> bool:
+    def _detect_finishing(self, piece: dict[str, ...]) -> bool:
         return self._detect_finishing_proper(piece)
 
     def _create_intermediate_response(self, piece: str):
@@ -97,17 +107,10 @@ class StreamingResponseHTTPExceptionDispatcherForCohere(StreamingResponseHTTPExc
         if piece.type == 'message-start':
             self.generation_id_in_stream_start = piece.id or ""
     
-    def _set_generation_id_for_openai(self, piece: openai_spec.ChatCompletionChunk | dict[str, ...]):
-        if self.generation_id_in_stream_start is not None:
-            return
-        if hasattr(piece, 'model_dump'):
-            piece_dict = piece.model_dump(exclude_unset=True, exclude_none=True)
-        elif isinstance(piece, dict):
-            piece_dict = piece
-        else:
-            piece_dict = {}
-        if 'id' in piece_dict:
-            self.generation_id_in_stream_start = piece_dict.get('id') or ""
+    # def _set_generation_id_for_openai(self, piece: openai_spec.ChatCompletionChunk | dict[str, ...]):
+    #     StreamingResponseHTTPExceptionDispatcherForOpenAI._set_generation_id_for_openai(
+    #         target=self, piece=piece
+    #     )
 
     @staticmethod
     def _stringify_v1(a_dict: dict[str, ...]) -> str:
@@ -117,9 +120,9 @@ class StreamingResponseHTTPExceptionDispatcherForCohere(StreamingResponseHTTPExc
     def _stringify_v2(a_dict: dict[str, ...]) -> str:
         return f'event: {a_dict.get("type")}\ndata: {json.dumps(a_dict)}\n\n'
 
-    @staticmethod
-    def _stringify_openai(a_dict: dict[str, ...]) -> str:
-        return f'data: {json.dumps(a_dict)}\n\n'
+    # @staticmethod
+    # def _stringify_openai(a_dict: dict[str, ...]) -> str:
+    #     return f'data: {json.dumps(a_dict)}\n\n'
 
     @staticmethod
     def _detect_finishing_v1(a_dict: dict[str, ...]) -> bool:
@@ -436,9 +439,12 @@ def cohere_chat_v1_stream(
         safety_mode=request.safety_mode or OMIT, 
     )
     
-    
-    from datetime import datetime
-    return response_iterator, dict(test=f'{datetime.now().isoformat()}')
+    additional_info = (
+        get_test_info_for_debug()
+        if Environment.get_instance().debug_append_test_info else
+        None
+    )
+    return response_iterator, additional_info
     
 
 def cohere_chat_v1_non_stream(
@@ -521,8 +527,12 @@ def cohere_chat_v2_stream(
     response_iterator: Iterator[StreamedChatResponse] = client.chat_stream(
         **omit_none_values(request, keys_to_exclude=('stream',))
     )
-    from datetime import datetime
-    return response_iterator, dict(test=f'{datetime.now().isoformat()}')
+    additional_info = (
+        get_test_info_for_debug()
+        if Environment.get_instance().debug_append_test_info else
+        None
+    )
+    return response_iterator, additional_info
 
 
 def cohere_chat_v2_non_stream(

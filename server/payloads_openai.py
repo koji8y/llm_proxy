@@ -2,6 +2,7 @@ from pydantic import BaseModel, Field, ConfigDict
 from typing import Iterable, Union, Optional, Dict, List, Literal, Sequence
 import openai.resources.chat.completions.completions as openai_spec
 import openai.types.chat.chat_completion as openai_spec_types
+import openai.types.chat.chat_completion_chunk as openai_spec_chunk_types
 import server.compatible_types as compat_spec
 
 

@@ -78,7 +78,7 @@ class StreamingResponseHTTPExceptionDispatcher:
         ...
 
     @abstractmethod
-    def _detect_finishing(self, piece: ...) -> bool:
+    def _detect_finishing(self, piece: dict[str, ...]) -> bool:
         ...
 
     @abstractmethod
@@ -94,6 +94,7 @@ class StreamingResponseHTTPExceptionDispatcher:
                     piece if isinstance(piece, dict) else
                     {}
                 )
+                # from icecream import ic; ic(type(piece_dict), piece_dict)
                 if self._detect_finishing(piece_dict):
                     # from icecream import ic; ic(self.additional_string)
                     for text in self.additional_string:
@@ -109,7 +110,8 @@ class StreamingResponseHTTPExceptionDispatcher:
             self._set_generation_id(piece)
             from icecream import ic
             ic(type(piece))
-            piece_model_dump = piece.model_dump(exclude_unset=True, exclude_none=True); ic(piece_model_dump)
+            piece_model_dump = piece.model_dump(exclude_unset=True, exclude_none=True)
+            ic(piece_model_dump)
             yield self._stringify(piece.model_dump(exclude_unset=True, exclude_none=True))
 
     def get_StreamingResponse_or_raise_HTTPException(self):
