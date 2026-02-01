@@ -444,7 +444,7 @@ def cohere_chat_v1_non_stream(
     api_key: str | None = None,
     x_client_name: str | None = None,
     accepts: str = "application/json",
-):
+) -> cohere.NonStreamedChatResponse:
     client = cohere.Client(api_key=api_key, base_url=Environment.get_instance().cohere_url)
     if isinstance(request, CohereChatV1StreamRequest):
         request = CohereChatV1NonStreamRequest.model_validate(
@@ -531,11 +531,11 @@ def cohere_chat_v2_non_stream(
     api_key: str | None = None,
     x_client_name: str | None = None,
     accepts: str = "application/json",
-) -> cohere.NonStreamedChatResponseV2:
+) -> cohere.V2ChatResponse:
 
     client = cohere.ClientV2(api_key=api_key, base_url=Environment.get_instance().cohere_url)
 
-    response: cohere.NonStreamedChatResponseV2 = client.chat(
+    response: cohere.V2ChatResponse = client.chat(
         **omit_none_values(request, keys_to_exclude=('stream',))
     )
     return response
