@@ -187,13 +187,18 @@ async def openai_chat_completions(
                 )
     else:
         try:
-            response = openai_chat_non_stream(
+            response, additional_info = openai_chat_non_stream(
                 request=request,
                 api_key=api_key,
                 x_client_name=x_client_name,
                 accepts=accepts,
                 base_url=base_url,
             )
+            additional_texts = [
+                f'\n{k}: {v} ({datetime.now().isoformat()}) {await get_session_str()}' for k, v in (additional_info or {}).items()
+            ]
+            if additional_texts:
+                response.choices[0].message.content += ''.join(additional_texts)
         except Exception:
             import traceback; traceback.print_exc()
             raise
@@ -201,6 +206,7 @@ async def openai_chat_completions(
 
 
 @app.post("/v1/chat", response_model=Union[cohere.NonStreamedChatResponse, cohere.StreamedChatResponse])
+@show_result_with_control(to_show=lambda: Environment.get_instance().debug_trace_response)
 async def cohere_v1_chat(
     request: Union[CohereChatV1NonStreamRequest, CohereChatV1StreamRequest],
     authorization: str | None = Header(None),
@@ -274,7 +280,7 @@ async def cohere_v1_chat(
         #     detail="Streaming is required for this endpoint. Please set 'stream' to true in the request."
         # )
         try:
-            response = cohere_chat_v1_non_stream(
+            response, additional_info = cohere_chat_v1_non_stream(
                 request=request,
                 api_key=api_key,
                 x_client_name=x_client_name,
@@ -283,10 +289,17 @@ async def cohere_v1_chat(
         except Exception:
             import traceback; traceback.print_exc()
             raise
+        additional_texts = [
+            f'\n{k}: {v} ({datetime.now().isoformat()}) {await get_session_str()}' for k, v in (additional_info or {}).items()
+        ]
+        if additional_texts:
+            response.text += ''.join(additional_texts)
+
         return response
 
 
 @app.post("/v2/chat", response_model=Union[CohereChatV2Response, cohere.V2ChatResponse])
+@show_result_with_control(to_show=lambda: Environment.get_instance().debug_trace_response)
 async def cohere_v2_chat(
     request: CohereChatV2Request,
     authorization: str | None = Header(None),
@@ -354,12 +367,18 @@ async def cohere_v2_chat(
         #     detail="Streaming is required for this endpoint. Please set 'stream' to true in the request."
         # )
         try:
-            response = cohere_chat_v2_non_stream(
+            response, additional_info = cohere_chat_v2_non_stream(
                 request=request,
                 api_key=api_key,
                 x_client_name=x_client_name,
                 accepts=accepts,
             )
+            if additional_info:
+                additional_texts = [
+                    f'\n{k}: {v} ({datetime.now().isoformat()}) {await get_session_str()}' for k, v in (additional_info or {}).items()
+                ]
+                if response.message.role == 'assistant':
+                    response.message.content[0].text += ''.join(additional_texts)
             return response
         except Exception:
             import traceback; traceback.print_exc()

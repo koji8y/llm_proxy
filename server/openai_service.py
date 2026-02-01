@@ -173,7 +173,7 @@ def openai_chat_non_stream(
     base_url: str | None = None,
     organization: str | None = None,
     project: str | None = None,
-) -> openai_spec.ChatCompletion:
+) -> tuple[openai_spec.ChatCompletion, dict | None]:
 
     client = OpenAI(api_key=api_key, base_url=base_url, organization=organization, project=project)
 
@@ -183,7 +183,12 @@ def openai_chat_non_stream(
             **opts,
         )
     # from icecream import ic; ic('openai_chat_non_stream', type(response))
-    return response
+    additional_info = (
+        get_test_info_for_debug()
+        if Environment.get_instance().debug_append_test_info else
+        None
+    )
+    return response, additional_info
 
 
 def generate_openai_style_response_json_strings(
