@@ -120,7 +120,6 @@ class StreamingResponseHTTPExceptionDispatcherForOpenAI(StreamingResponseHTTPExc
         return piece.get('choices', {})[0].get('finish_reason')
 
     def _create_intermediate_response(self, text: str) :
-        # data: {"id":"chatcmpl-D3vIvxav0PfIeUxUu3YsysPuX1iKs","object":"chat.completion.chunk","created":1769827633,"model":"gpt-4o-2024-08-06","service_tier":"default","system_fingerprint":"fp_fa7f5b168b","choices":[{"index":0,"delta":{"content":"As"},"logprobs":null,"finish_reason":null}],"obfuscation":"yckpG2S4psb"}
         data = openai_spec.ChatCompletionChunk(
             id=self.generation_id_in_stream_start,
             object="chat.completion.chunk",
@@ -136,7 +135,6 @@ class StreamingResponseHTTPExceptionDispatcherForOpenAI(StreamingResponseHTTPExc
             created=0,
             model="",
         )
-        # return f'data: {data.model_dump_json(exclude_unset=True, exclude_none=True)}\n\n'
         return data
 
 def openai_chat_stream(
@@ -176,7 +174,6 @@ def openai_chat_non_stream(
     organization: str | None = None,
     project: str | None = None,
 ) -> openai_spec.ChatCompletion:
-# ) -> payloads.ChatCompletion:
 
     client = OpenAI(api_key=api_key, base_url=base_url, organization=organization, project=project)
 
@@ -201,41 +198,12 @@ def generate_openai_style_response_json_strings(
     if generation_id is None:
         generation_id = create_generation_id()
     if send_stream_start:
-        # json[0].choices = [];
-        # json[0].choices[0] = {};
-        # json[0].choices[0].delta = {};
-        # json[0].choices[0].delta.content = "";
-        # json[0].choices[0].delta.refusal = null;
-        # json[0].choices[0].delta.role = "assistant";
-        # json[0].choices[0].finish_reason = null;
-        # json[0].choices[0].index = 0;
-        # json[0].created = 1769573307;
-        # json[0].id = "chatcmpl-D2r8txbp7PuQoI756vdZd1dZ1jsvn";
-        # json[0].model = "gpt-5-2025-08-07";
-        # json[0].obfuscation = "E2Dsqz6";
-        # json[0].object = "chat.completion.chunk";
-        # json[0].service_tier = "default";
-        # json[0].system_fingerprint = null;
         yield StreamingResponseHTTPExceptionDispatcherForOpenAI._stringify(dict(
             choices=[dict(delta=dict(content="", refusal=None, role="assistant"), finish_reason=None, index=0)],
             id=generation_id,
             object="chat.completion.chunk",
         ))
 
-    # json[1] = {};
-    # json[1].choices = [];
-    # json[1].choices[0] = {};
-    # json[1].choices[0].delta = {};
-    # json[1].choices[0].delta.content = "As";
-    # json[1].choices[0].finish_reason = null;
-    # json[1].choices[0].index = 0;
-    # json[1].created = 1769573307;
-    # json[1].id = "chatcmpl-D2r8txbp7PuQoI756vdZd1dZ1jsvn";
-    # json[1].model = "gpt-5-2025-08-07";
-    # json[1].obfuscation = "rsEqbqo";
-    # json[1].object = "chat.completion.chunk";
-    # json[1].service_tier = "default";
-    # json[1].system_fingerprint = null;
     emitted_chunks: list[str] = []
     for chunk in chunked_message:
         content_delta = dict(
@@ -260,19 +228,6 @@ def generate_openai_style_response_json_strings(
             object="chat.completion.chunk",
         ))
 
-    # json[43] = {};
-    # json[43].choices = [];
-    # json[43].choices[0] = {};
-    # json[43].choices[0].delta = {};
-    # json[43].choices[0].finish_reason = "stop";
-    # json[43].choices[0].index = 0;
-    # json[43].created = 1769573307;
-    # json[43].id = "chatcmpl-D2r8txbp7PuQoI756vdZd1dZ1jsvn";
-    # json[43].model = "gpt-5-2025-08-07";
-    # json[43].obfuscation = "LkM";
-    # json[43].object = "chat.completion.chunk";
-    # json[43].service_tier = "default";
-    # json[43].system_fingerprint = null;
     yield StreamingResponseHTTPExceptionDispatcherForOpenAI._stringify(dict(
         choices=[dict(delta=dict(), finish_reason=finished_reason, index=0)],
         id=generation_id,

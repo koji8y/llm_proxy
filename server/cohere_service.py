@@ -106,11 +106,6 @@ class StreamingResponseHTTPExceptionDispatcherForCohere(StreamingResponseHTTPExc
     def _set_generation_id_for_v2(self, piece: StreamedChatResponseV2):
         if piece.type == 'message-start':
             self.generation_id_in_stream_start = piece.id or ""
-    
-    # def _set_generation_id_for_openai(self, piece: openai_spec.ChatCompletionChunk | dict[str, ...]):
-    #     StreamingResponseHTTPExceptionDispatcherForOpenAI._set_generation_id_for_openai(
-    #         target=self, piece=piece
-    #     )
 
     @staticmethod
     def _stringify_v1(a_dict: dict[str, ...]) -> str:
@@ -119,10 +114,6 @@ class StreamingResponseHTTPExceptionDispatcherForCohere(StreamingResponseHTTPExc
     @staticmethod
     def _stringify_v2(a_dict: dict[str, ...]) -> str:
         return f'event: {a_dict.get("type")}\ndata: {json.dumps(a_dict)}\n\n'
-
-    # @staticmethod
-    # def _stringify_openai(a_dict: dict[str, ...]) -> str:
-    #     return f'data: {json.dumps(a_dict)}\n\n'
 
     @staticmethod
     def _detect_finishing_v1(a_dict: dict[str, ...]) -> bool:
@@ -406,6 +397,10 @@ def cohere_chat_v1_stream(
 
     client = cohere.Client(api_key=api_key, base_url=Environment.get_instance().cohere_url)
 
+    additional_args = {}
+    if 'response_format' in request.model_dump(exclude_unset=True):
+        additional_args['response_format'] = request.response_format
+
     # StreamedChatResponseのイテレータを生成
     response_iterator: Iterator[StreamedChatResponse] = client.chat_stream(
         model=request.model or "command-a-plus",
@@ -431,11 +426,8 @@ def cohere_chat_v1_stream(
         tools=request.tools or OMIT,
         tool_results=request.tool_results or OMIT,
         force_single_step=request.force_single_step or OMIT,
-        # 下記のオプションはNone Typeで落ちるので一時的にコメントアウト
-        # -> デフォルト引数のOMITでも落ちるので、このオプションが利用されるときは修正
-        # File "/home/stratus/git-under/fre_pj_2025/for_dev/guardrails/venv/lib/python3.11/site-packages/cohere/client.py", line 95, in check_kwarg
-        # return deprecated_kwarg in kwargs
         # response_format=cohereChatV1Request.response_format or OMIT,
+        **additional_args,
         safety_mode=request.safety_mode or OMIT, 
     )
     
@@ -523,7 +515,6 @@ def cohere_chat_v2_stream(
 
     client = cohere.ClientV2(api_key=api_key, base_url=Environment.get_instance().cohere_url)
 
-    # StreamedChatResponseのイテレータを生成
     response_iterator: Iterator[StreamedChatResponse] = client.chat_stream(
         **omit_none_values(request, keys_to_exclude=('stream',))
     )
