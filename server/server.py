@@ -113,11 +113,7 @@ async def v1_chat_completions(
     accepts: str = Header("text/event-stream"),
     x_client_name: str | None = Header(None),
     base_url: str | None = None,
-# ) -> openai_spec.Stream[openai_spec.ChatCompletionChunk] | payloads_openai.ChatCompletion:
 ) -> openai_spec.Stream[openai_spec.ChatCompletionChunk] | openai_spec.ChatCompletion:
-# ) -> openai_spec.ChatCompletion:
-# ) -> dict:
-# ):
     result = await openai_chat_completions(
         request=request,
         authorization=authorization,
@@ -125,8 +121,6 @@ async def v1_chat_completions(
         x_client_name=x_client_name,
         base_url=Environment.get_instance().openai_url,
     )
-    # from icecream import ic; ic(30, result)
-    # from icecream import ic; ic('v1_chat_completions', type(result))
     if request.stream:
         return result
     else:
@@ -142,15 +136,6 @@ async def openai_chat_completions(
     x_client_name: str | None = Header(None),
 # ) -> openai_spec.Stream[openai_spec.ChatCompletionChunk] | payloads_openai.ChatCompletion:
 ) -> openai_spec.Stream[openai_spec.ChatCompletionChunk] | openai_spec.ChatCompletion:
-# ) -> openai_spec.ChatCompletion:
-# ):
-    # from icecream import ic; ic(base_url)
-    # from icecream import ic; ic(request.model_dump(exclude_none=True, exclude_unset=True, exclude_defaults=True, exclude_computed_fields=True))
-    # # if isinstance(request, dict):
-    # #     if request.get('stream', False):
-    # #         request = OpenAIChatStreamingRequest.model_validate(request)
-    # #     else:
-    # #         request = OpenAIChatNonStreamingRequest.model_validate(request)
     if authorization is not None and authorization.lower().startswith("bearer "):
         api_key = authorization[len("bearer "):].strip()
     elif Environment.get_instance().precheck_api_key:
@@ -201,10 +186,6 @@ async def openai_chat_completions(
                     media_type="text/event-stream",
                 )
     else:
-        # raise HTTPException(
-        #     status_code=400,
-        #     detail="Streaming is required for this endpoint. Please set 'stream' to true in the request."
-        # )
         try:
             response = openai_chat_non_stream(
                 request=request,
@@ -213,25 +194,9 @@ async def openai_chat_completions(
                 accepts=accepts,
                 base_url=base_url,
             )
-            # from icecream import ic; ic(response)
-            # ic('-', response.model_dump(exclude_none=True, exclude_unset=True, exclude_defaults=True, exclude_computed_fields=True))
-            # response = openai_spec.ChatCompletion.model_validate(
-            #     ic({
-            #         ic(k): ic(vm)
-            #         for k, v in response.model_dump(exclude_none=True, exclude_unset=True, exclude_defaults=True, exclude_computed_fields=True).items()
-            #         if k in ['choices', 'id', 'object', 'created', 'model']
-            #         for vm in [v if k == 'created' else v]
-            #     })
-            # )
-            # ic('a', response)
-            # response = response.model_dump(exclude_computed_fields=True, exclude_none=True, exclude_defaults=True, exclude_unset=True)
-            # response = openai_spec.ChatCompletion.model_validate(response)
         except Exception:
             import traceback; traceback.print_exc()
             raise
-        # response = payloads_openai.ChatCompletion.model_validate(
-        #     response.model_dump(exclude_computed_fields=True, exclude_none=True, exclude_defaults=True, exclude_unset=True)
-        # )
         return response
 
 
