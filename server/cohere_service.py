@@ -1,7 +1,7 @@
 from __future__ import annotations
 from typing import Iterator, Literal, Iterable, Callable, TypeVar, Collection
 from fastapi import HTTPException
-from server.payloads import CohereChatV1StreamRequest, CohereChatV1NonStreamRequest, CohereChatV2Request
+from server.payloads_cohere import CohereChatV1StreamRequest, CohereChatV1NonStreamRequest, CohereChatV2Request
 from pydantic import BaseModel
 
 import cohere

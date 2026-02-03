@@ -6,7 +6,7 @@ from datetime import datetime
 from fastapi import FastAPI, HTTPException, Header
 from fastapi.responses import StreamingResponse
 from datetime import datetime
-from server.payloads import (
+from server.payloads_cohere import (
     CohereChatV1NonStreamRequest,
     CohereChatV1StreamRequest,
     # CohereChatV1Response,
