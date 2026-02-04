@@ -14,6 +14,9 @@ curlh() {
 process_lines() {
   (cat "$@"; echo '') | awk '/^$/ {next} {print}'
 }
+header_to_json() {
+  sed -e 's/ \([^"][a-zA-Z-]*[^"]\)$/ "\1"/'| awk '/^[^{]/{printf("%s}\n", $0); next}{print}' | sed -e 's/\(^[^{][^:]*\):/{"\1":/'
+}
 help_exit() {
   echo "Usage: $(basename $0) [-s|-n] [-1|-2|-c|-o] [-H path_to_header] [-m message] [-u base_url] [-k key_variable] [-w model_name] [-L] [-M model_name] [-P] [-N]"
   echo ''
@@ -32,9 +35,10 @@ help_exit() {
   echo "  -M: get the specific model's information instead of chatting"
   echo "  -P: preserve temporal file"
   echo "  -N: ends with new line and omit empty string line"
+  echo "  -J: make header format to JSON"
   exit 1
 }
-while getopts "sn12coH:u:k:w:LM:PNh" opt; do case "${opt}" in
+while getopts "sn12coH:u:k:w:LM:PNJh" opt; do case "${opt}" in
   s) stream=true ;;
   n) stream=false ;;
   1) cohere_version=1 ;;
@@ -50,6 +54,7 @@ while getopts "sn12coH:u:k:w:LM:PNh" opt; do case "${opt}" in
   M) target_model="${OPTARG}" ;;
   P) preserve_tmp=true ;;
   N) process_lines=process_lines ;;
+  J) header_to_json=header_to_json ;;
   h|\?) help_exit ;;
 esac; done
 
@@ -119,7 +124,7 @@ if [ -n "${get_models}" ] || [ -n "${target_model}" ]; then
   #   > "${body_path}"
   # echo "[Body:]"
   # cat "${body_path}"
-  curlh -X GET -H @${header_path} --url ${base_url}/${path} | ${process_lines:-cat}
+  curlh -X GET -H @${header_path} --url ${base_url}/${path} | ${process_lines:-cat} | ${header_to_json:-cat}
   exit 0
 fi
 
@@ -129,4 +134,4 @@ cat "${body_template}" \
 echo "[Body:]" 1>&2
 cat "${body_path}" 1>&2
 
-curlh -X POST --data @${body_path} -H @${header_path} --url ${base_url}/${path} | ${process_lines:-cat}
+curlh -X POST --data @${body_path} -H @${header_path} --url ${base_url}/${path} | ${process_lines:-cat} | ${header_to_json:-cat}
