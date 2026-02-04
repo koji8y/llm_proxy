@@ -108,10 +108,10 @@ class StreamingResponseHTTPExceptionDispatcher:
             if self.log_to_info:
                 CommonServiceLogger.get_instance().info(f"Received piece: {piece}")
             self._set_generation_id(piece)
-            from icecream import ic
-            ic(type(piece))
+            # from icecream import ic
+            # ic(type(piece))
             piece_model_dump = piece.model_dump(exclude_unset=True, exclude_none=True)
-            ic(piece_model_dump)
+            # ic(piece_model_dump)
             yield self._stringify(piece.model_dump(exclude_unset=True, exclude_none=True))
 
     def get_StreamingResponse_or_raise_HTTPException(self):

@@ -53,6 +53,19 @@ def record(chunks: Iterable[any], path):
             print(f'[{type(chunk)}]: {chunk}', file=out_file)
             yield chunk
 
+ZWSP = '\u200b'
+async def prepend_zwsp_to_each_line(text: str) -> str:
+    return '\n'.join([f'\u200b{line}' for line in text.splitlines()])
+async def prepend_zwsp_to_each_lines(texts: list[str]) -> str:
+    return [
+        await prepend_zwsp_to_each_line(text) for text in texts
+    ]
+
+async def make_additional_texts(additional_info: dict[str, str] | None) -> list[str]:
+    return [
+        f'\n{k}: {v} ({datetime.now().isoformat()}) {await get_session_str()}' for k, v in (additional_info or {}).items()
+    ]
+
 
 @app.post(
     "/compatibility/v1/chat/completions",
@@ -158,9 +171,9 @@ async def openai_chat_completions(
                 accepts=accepts,
                 base_url=base_url,
             )
-            additional_texts = [
-                f'\n{k}: {v} ({datetime.now().isoformat()}) {await get_session_str()}' for k, v in (additional_info or {}).items()
-            ]
+            additional_texts = await prepend_zwsp_to_each_lines(
+                await make_additional_texts(additional_info)
+            )
             dispatcher = StreamingResponseHTTPExceptionDispatcherForOpenAI(response=stream, additional_strings=additional_texts)
             return dispatcher.get_StreamingResponse_or_raise_HTTPException()
         except Exception as exp:  # TODO: should shrink the range from general Exception
@@ -194,9 +207,7 @@ async def openai_chat_completions(
                 accepts=accepts,
                 base_url=base_url,
             )
-            additional_texts = [
-                f'\n{k}: {v} ({datetime.now().isoformat()}) {await get_session_str()}' for k, v in (additional_info or {}).items()
-            ]
+            additional_texts = await prepend_zwsp_to_each_lines(await make_additional_texts(additional_info))
             if additional_texts:
                 response.choices[0].message.content += ''.join(additional_texts)
         except Exception:
@@ -246,9 +257,9 @@ async def cohere_v1_chat(
                 x_client_name=x_client_name,
                 accepts=accepts,
             )
-            additional_texts = [
-                f'\n{str(k).strip()}: {str(v).strip()} ({datetime.now().isoformat()}) {await get_session_str()}' for k, v in (additional_info or {}).items()
-            ]
+            additional_texts = await prepend_zwsp_to_each_lines(
+                await make_additional_texts(additional_info)
+            )
             request_model_dump = request.model_dump(exclude_none=True, exclude_unset=True, exclude_defaults=True); from icecream import ic; ic(additional_texts, request_model_dump)
             dispatcher = StreamingResponseHTTPExceptionDispatcherForCohere(response=stream, api_version="v1", additional_strings=additional_texts)
             return dispatcher.get_StreamingResponse_or_raise_HTTPException()
@@ -289,9 +300,7 @@ async def cohere_v1_chat(
         except Exception:
             import traceback; traceback.print_exc()
             raise
-        additional_texts = [
-            f'\n{k}: {v} ({datetime.now().isoformat()}) {await get_session_str()}' for k, v in (additional_info or {}).items()
-        ]
+        additional_texts = await prepend_zwsp_to_each_lines(await make_additional_texts(additional_info))
         if additional_texts:
             response.text += ''.join(additional_texts)
 
@@ -334,9 +343,9 @@ async def cohere_v2_chat(
                 x_client_name=x_client_name,
                 accepts=accepts,
             )
-            additional_texts = [
-                f'\n{k}: {v} ({datetime.now().isoformat()}) {await get_session_str()}' for k, v in (additional_info or {}).items()
-            ]
+            additional_texts = await prepend_zwsp_to_each_lines(
+                await make_additional_texts(additional_info)
+            )
             dispatcher = StreamingResponseHTTPExceptionDispatcherForCohere(response=stream, api_version="v2", additional_strings=additional_texts)
             return dispatcher.get_StreamingResponse_or_raise_HTTPException()
         except Exception as exp:
@@ -373,12 +382,11 @@ async def cohere_v2_chat(
                 x_client_name=x_client_name,
                 accepts=accepts,
             )
-            if additional_info:
-                additional_texts = [
-                    f'\n{k}: {v} ({datetime.now().isoformat()}) {await get_session_str()}' for k, v in (additional_info or {}).items()
-                ]
-                if response.message.role == 'assistant':
-                    response.message.content[0].text += ''.join(additional_texts)
+            if additional_info and response.message.role == 'assistant':
+                additional_texts = await prepend_zwsp_to_each_lines(
+                    await make_additional_texts(additional_info)
+                )
+                response.message.content[0].text += ''.join(additional_texts)
             return response
         except Exception:
             import traceback; traceback.print_exc()
