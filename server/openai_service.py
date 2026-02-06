@@ -138,7 +138,7 @@ class StreamingResponseHTTPExceptionDispatcherForOpenAI(StreamingResponseHTTPExc
         return data
 
 def openai_chat_stream(
-    request: OpenAIChatNonStreamingRequest,
+    request: OpenAIChatStreamingRequest,
     api_key: str | None = None,
     x_client_name: str | None = None,
     accepts: str = "text/event-stream",
