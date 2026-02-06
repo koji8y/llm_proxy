@@ -102,7 +102,7 @@ base_url="${base_url%/}"
 
 if [ -z "${header}" ]; then
   cat "${header_template}" \
-    | sed -e 's/${API_KEY}/'"${!key_variable}"'/' \
+    | sed -e 's/${API_KEY}/'"${!key_variable:-not specified by ${key_variable}}"'/' \
     > "${header_path}"
 else
   echo "${header}" > "${heeader_path}"
