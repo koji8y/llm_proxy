@@ -142,7 +142,10 @@ def call_cohere_v2(
             messages=[{"role": "user", "content": prompt}]
         )
         for token in response:
+            if token.type in ['message-end']:
+                break
             if token.type not in ['content-delta']:
+                # from icecream import ic; ic(token.model_dump())
                 continue
             print(token.delta.message.content.text, end='', flush=True)
         print()
@@ -214,7 +217,7 @@ if __name__ == "__main__":
 
     args = argparser.parse_args()
 
-    from icecream import ic; ic(args)
+    # from icecream import ic; ic(args)
 
     model = args.model or DEFAULT_MODEL[args.operation]
     call_api = CALLERS[args.operation].call_func
@@ -227,7 +230,7 @@ if __name__ == "__main__":
         if api_key is not None:
             break
         api_key = os.getenv(api_key_env, None)
-    from icecream import ic; ic(call_api, prompt, args.stream, model, additional_params, api_key)
+    # from icecream import ic; ic(call_api, prompt, args.stream, model, additional_params, api_key)
     call_api(
         prompt=prompt,
         stream=args.stream,
