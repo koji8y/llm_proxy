@@ -42,6 +42,7 @@ class Caller:
     call_func: Callable[..., None]
     additional_default_params: dict[str, Any]
     api_key_envs: list[str]
+    adjust_params: Callable[[dict[str, Any]], dict[str, Any]] | None = None
 
 
 def call_cohere_v1(
@@ -180,13 +181,28 @@ CALLERS = {
             "project": os.getenv("OPENAI_PROJECT", None),
         },
         api_key_envs=["OPENAI_API_KEY"],
+        adjust_params=lambda params: {
+            **{k: v for k, v in params.items() if k != 'base_url'},
+            "base_url": (
+                (
+                    params['base_url']
+                    if params['base_url'].rstrip('/').endswith('/v1') else
+                    params['base_url'].rstrip('/') + '/v1'
+                ) if params.get('base_url') is not None else
+                None
+            ),
+        }
     ),
     "cohere_compat": Caller(
         call_func=call_openai,
         additional_default_params={
-            "base_url": os.getenv("COHERE_URL", "https://api.cohere.com").rstrip('/') + '/compatibility/v1',
+            "base_url": os.getenv("COHERE_URL", "https://api.cohere.com"),
         },
         api_key_envs=["CO_API_KEY", "COHERE_API_KEY"],
+        adjust_params=lambda params: {
+            **{k: v for k, v in params.items() if k != 'base_url'},
+            "base_url": params['base_url'].rstrip('/') + '/compatibility/v1' if params.get('base_url') is not None else None,
+        }
     ),
 }
 
@@ -230,7 +246,10 @@ if __name__ == "__main__":
         if api_key is not None:
             break
         api_key = os.getenv(api_key_env, None)
+    if CALLERS[args.operation].adjust_params is not None:
+        additional_params = CALLERS[args.operation].adjust_params(additional_params)
     # from icecream import ic; ic(call_api, prompt, args.stream, model, additional_params, api_key)
+    print(f'Prompt: {prompt}\n---')
     call_api(
         prompt=prompt,
         stream=args.stream,
