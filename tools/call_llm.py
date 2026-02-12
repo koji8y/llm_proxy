@@ -4,23 +4,25 @@
 # - Support loading API keys from environment variables using python-dotenv.
 # - Support the streaming and non-streaming modes for all APIs
 from __future__ import annotations
-from typing import Literal, TypeAlias, Callable, Any
+from typing import Literal, TypeAlias, Callable, Any, Iterable, Optional, Protocol
 import argparse
 import os
 from dataclasses import dataclass
 import cohere
 import openai
+import anthropic
 from dotenv import load_dotenv
 load_dotenv()
 
 
-ApiType: TypeAlias = Literal["cohere_v1", "cohere_v2", "cohere_compat", "openai"]
+ApiType: TypeAlias = Literal["cohere_v1", "cohere_v2", "cohere_compat", "openai", "anthropic"]
 
 DEFAULT_MODEL: dict[ApiType, str] = {
     "cohere_v1": "command-a-03-2025",
     "cohere_v2": "command-a-03-2025",
     "cohere_compat": "command-a-03-2025",
     "openai": "gpt-5.2",
+    "anthropic": "claude-opus-4-6",
 }
 
 MessageType: TypeAlias = Literal["attack", "benign"]
@@ -38,13 +40,99 @@ Message: dict[tuple[MessageType, LangType], str] = {
 
 
 @dataclass
+class CallerMandatoryArgs:
+    prompt: str
+    stream: bool
+    api_key: str | None
+
+
+class CallFunc(Protocol):
+    def __call__(
+        self,
+        prompt: str,
+        stream: bool,
+        api_key: str | None = None,
+        model: str | None = None,
+        base_url: str | None = None,
+        **kwargs: Any,
+    ) -> None:
+        ...
+
+
+class AdjustParamsFunc(Protocol):
+    def __call__(
+        self,
+        params: dict[str, Any],
+        mandatory_args: Optional[CallerMandatoryArgs],
+    ) -> dict[str, Any]:
+        ...
+
+
+@dataclass
 class Caller:
-    call_func: Callable[..., None]
+    call_func: CallFunc
     additional_default_params: dict[str, Any]
     api_key_envs: list[str]
-    adjust_params: Callable[[dict[str, Any]], dict[str, Any]] | None = None
+    adjust_params: AdjustParamsFunc | None = None
 
 
+call_anthropic: CallFunc
+def call_anthropic(
+    prompt: str,
+    stream: bool,
+    api_key: str | None = None,
+    model: str | None = None,
+    base_url: str | None = None,
+    max_tokens: int | None = None,
+):
+    if model is None:
+        model = DEFAULT_MODEL["anthropic"]
+    if api_key is None:
+        api_key = os.getenv("ANTHROPIC_API_KEY", "Not supplied")
+    client_opts = {}
+    if api_key is not None:
+        client_opts['api_key'] = api_key
+    if base_url is not None:
+        client_opts["base_url"] = base_url
+    create_opts = {}
+    if max_tokens is not None:
+        create_opts["max_tokens"] = max_tokens
+
+    client = anthropic.Anthropic(**client_opts)
+
+    message = client.messages.create(
+        model=model,
+        messages=[
+            {"role": "user", "content": prompt}
+        ],
+        stream=stream,
+        **create_opts,
+    )
+    if stream:
+        message: Iterable[anthropic.types.RawMessageStreamEvent] = message
+        last_chunk: str | None = None
+        for event in message:
+            if event.type != 'content_block_delta':
+                continue
+            if event.type == 'message_stop':
+                break
+            if event.delta.type == 'text_delta':
+                print(event.delta.text, end='', flush=True)
+                last_chunk = event.delta.text
+        if last_chunk is not None and not last_chunk.endswith('\n'):
+            print()
+    else:
+        message: anthropic.types.Message = message
+        last_text: str | None = None
+        for event in message.content:
+            if event.type == 'text':
+                print(event.text)
+                last_text = event.text
+        if last_text is not None and not last_text.endswith('\n'):
+            print()
+
+
+call_cohere_v1: CallFunc
 def call_cohere_v1(
     prompt: str,
     stream: bool,
@@ -54,8 +142,9 @@ def call_cohere_v1(
 ):
     if model is None:
         model = DEFAULT_MODEL["cohere_v1"]
-    cohere_api_key = os.getenv("COHERE_API_KEY", "Not supplied")
-    from icecream import ic; ic(cohere_api_key, base_url)
+    if api_key is None:
+        api_key = os.getenv("COHERE_API_KEY", "Not supplied")
+    from icecream import ic; ic(api_key, base_url)
     opts = {}
     if api_key is not None:
         opts['api_key'] = api_key
@@ -79,6 +168,8 @@ def call_cohere_v1(
         )
         print(response.text)
 
+
+call_openai: CallFunc
 def call_openai(
     prompt: str,
     stream: bool,
@@ -122,6 +213,8 @@ def call_openai(
         )
         print(response.choices[0].message.content)
 
+
+call_cohere_v2: CallFunc
 def call_cohere_v2(
     prompt: str,
     stream: bool,
@@ -181,7 +274,7 @@ CALLERS = {
             "project": os.getenv("OPENAI_PROJECT", None),
         },
         api_key_envs=["OPENAI_API_KEY"],
-        adjust_params=lambda params: {
+        adjust_params=lambda params, _: {
             **{k: v for k, v in params.items() if k != 'base_url'},
             "base_url": (
                 (
@@ -199,10 +292,23 @@ CALLERS = {
             "base_url": os.getenv("COHERE_URL", "https://api.cohere.com"),
         },
         api_key_envs=["CO_API_KEY", "COHERE_API_KEY"],
-        adjust_params=lambda params: {
+        adjust_params=lambda params, _: {
             **{k: v for k, v in params.items() if k != 'base_url'},
             "base_url": params['base_url'].rstrip('/') + '/compatibility/v1' if params.get('base_url') is not None else None,
         }
+    ),
+    "anthropic": Caller(
+        call_func=call_anthropic,
+        additional_default_params={
+            "base_url": os.getenv("ANTHROPIC_URL", None),
+        },
+        api_key_envs=["ANTHROPIC_API_KEY"],
+        adjust_params=lambda params, mandatory_args:
+            params | (
+                dict()
+                if mandatory_args.stream else
+                dict(max_tokens=2048)
+            )
     ),
 }
 
@@ -219,6 +325,7 @@ if __name__ == "__main__":
     group.add_argument("--cohere_v2", "-2", action="store_const", const="cohere_v2", dest="operation", help="Use Cohere v2 API")
     group.add_argument("--cohere_compat", "-c", action="store_const", const="cohere_compat", dest="operation", help="Use Cohere OpenAI-compatible API")
     group.add_argument("--openai", "-o", action="store_const", const="openai", dest="operation", help="Use OpenAI API")
+    group.add_argument("--anthropic", "-a", action="store_const", const="anthropic", dest="operation", help="Use Anthropic API")
     argparser.add_argument("--stream", "-s", action="store_true", help="Use streaming mode")
     # If no language argument is specified, default to English
     lang_group = argparser.add_mutually_exclusive_group(required=False)
@@ -226,8 +333,8 @@ if __name__ == "__main__":
     lang_group.add_argument("--ja", "-j", action="store_const", const="ja", dest="language", help="Use Japanese language")
     prompt_group = argparser.add_mutually_exclusive_group(required=False)
     prompt_group.add_argument("--prompt", "-m", type=str, help="Prompt to send to the LLM")
-    prompt_group.add_argument("--attack", "-a", action="store_const", const="attack", dest="prompt_template", help="Use default attack prompt")
-    prompt_group.add_argument("--benign", "-b", action="store_const", const="benign", dest="prompt_template", help="Use default benign prompt")
+    prompt_group.add_argument("--attack", "-A", action="store_const", const="attack", dest="prompt_template", help="Use default attack prompt")
+    prompt_group.add_argument("--benign", "-B", action="store_const", const="benign", dest="prompt_template", help="Use default benign prompt")
     argparser.add_argument("--model", "-M", type=str, default=None, help="Model name to use")
     argparser.add_argument("--base_url", "-u", type=str, default=None, help="Base URL for the API")
 
@@ -247,7 +354,10 @@ if __name__ == "__main__":
             break
         api_key = os.getenv(api_key_env, None)
     if CALLERS[args.operation].adjust_params is not None:
-        additional_params = CALLERS[args.operation].adjust_params(additional_params)
+        additional_params = CALLERS[args.operation].adjust_params(
+            additional_params,
+            CallerMandatoryArgs(prompt, args.stream, api_key),
+        )
     # from icecream import ic; ic(call_api, prompt, args.stream, model, additional_params, api_key)
     print(f'Prompt: {prompt}\n---')
     call_api(
