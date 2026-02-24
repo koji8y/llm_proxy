@@ -85,6 +85,7 @@ def call_anthropic(
     model: str | None = None,
     base_url: str | None = None,
     max_tokens: int | None = None,
+    show_model: bool | str = False,
 ):
     if model is None:
         model = DEFAULT_MODEL["anthropic"]
@@ -101,6 +102,19 @@ def call_anthropic(
 
     client = anthropic.Anthropic(**client_opts)
 
+    if show_model:
+        if show_model is True:
+            response = client.models.list()
+            models = response.model_dump().get('data')
+            from icecream import ic; ic(models)
+        else:
+            response = client.models.list()
+            model = {
+                model1.get('id'): model1
+                for model1 in response.model_dump().get('data')
+            }.get(show_model)
+            from icecream import ic; ic(model)
+        return
     message = client.messages.create(
         model=model,
         messages=[
@@ -140,6 +154,7 @@ def call_cohere_v1(
     api_key: str | None = None,
     model: str | None = None,
     base_url: str | None = None,
+    show_model: bool | str = False,
 ):
     if model is None:
         model = DEFAULT_MODEL["cohere_v1"]
@@ -152,6 +167,16 @@ def call_cohere_v1(
     if base_url is not None:
         opts["base_url"] = base_url
     client = cohere.Client(**opts)
+    if show_model:
+        if show_model is True:
+            response = client.models.list()
+            models = response.model_dump().get('models')
+            from icecream import ic; ic(models)
+        else:
+            response = client.models.get(model=show_model)
+            model = response.model_dump()
+            from icecream import ic; ic(model)
+        return
     if stream:
         response = client.chat_stream(
             message=prompt,
@@ -179,6 +204,7 @@ def call_openai(
     base_url: str = None,
     organization: str = None,
     project: str = None,
+    show_model: bool | str = False,
 ):
     if model is None:
         model = DEFAULT_MODEL["openai"]
@@ -194,6 +220,19 @@ def call_openai(
     client = openai.OpenAI(
         **opts
     )
+    if show_model:
+        if show_model is True:
+            response = client.models.list()
+            models = response.model_dump().get('data')
+            from icecream import ic; ic(models)
+        else:
+            response = client.models.list()
+            model = {
+                model1.get('id'): model1
+                for model1 in response.model_dump().get('data')
+            }.get(show_model)
+            from icecream import ic; ic(model)
+        return
     if stream:
         response = client.chat.completions.create(
             model=model,
@@ -222,6 +261,7 @@ def call_cohere_v2(
     api_key: str | None = None,
     model: str | None = None,
     base_url: str | None = None,
+    show_model: bool | str = False,
 ):
     if model is None:
         model = DEFAULT_MODEL["cohere_v2"]
@@ -231,6 +271,16 @@ def call_cohere_v2(
     if base_url is not None:
         opts["base_url"] = base_url
     co = cohere.ClientV2(**opts)
+    if show_model:
+        if show_model is True:
+            response = co.models.list()
+            models = response.model_dump().get('models')
+            from icecream import ic; ic(models)
+        else:
+            response = co.models.get(model=show_model)
+            model = response.model_dump()
+            from icecream import ic; ic(model)
+        return
     if stream:
         response = co.chat_stream(
             model=model,
@@ -325,15 +375,6 @@ def show_response(response: Response):
         print(response.text)
 
 
-def post_validate_prompt(prompt: str, base_url: str, **kwargs):
-    # Connect with POST to base_url/debug/validate_prompt with `{'prompt': prompt, 'with_lang_detection': False}` `}`
-    import requests
-    url = base_url.rstrip('/') + '/debug/validate_prompt'
-    from icecream import ic; ic(url)
-    response: Response = requests.post(url, json={'prompt': prompt, 'ignore_lang_detection': True})
-    show_response(response)
-
-
 def get_model_list(base_url: str, **kwargs):
     from icecream import ic; ic(base_url)
     import requests
@@ -393,16 +434,15 @@ if __name__ == "__main__":
             additional_params,
             CallerMandatoryArgs(prompt, args.stream, api_key),
         )
+    show_model = args.list_models or args.model_info
     # from icecream import ic; ic(call_api, prompt, args.stream, model, additional_params, api_key)
-    print(f'Prompt: {prompt}\n---')
-    if args.list_models:
-        from icecream import ic; ic(additional_params)
-        get_model_list(**additional_params)
-    else:
-        call_api(
-            prompt=prompt,
-            stream=args.stream,
-            model=model,
-            api_key=api_key,
-            **additional_params,
-        )
+    if not show_model:
+        print(f'Prompt: {prompt}\n---')
+    call_api(
+        prompt=prompt,
+        stream=args.stream,
+        model=model,
+        api_key=api_key,
+        show_model=show_model,
+        **additional_params,
+    )
