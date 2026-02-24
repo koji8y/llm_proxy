@@ -11,6 +11,7 @@ from dataclasses import dataclass
 import cohere
 import openai
 import anthropic
+from requests import Response
 from dotenv import load_dotenv
 load_dotenv()
 
@@ -313,6 +314,38 @@ CALLERS = {
 }
 
 
+def show_response(response: Response):
+    print(f"Status code: {response.status_code}")
+    try:
+        print("Response JSON:")
+        print(response.json())
+    except Exception as e:
+        print("Failed to parse response as JSON:", e)
+        print("Response text:")
+        print(response.text)
+
+
+def post_validate_prompt(prompt: str, base_url: str, **kwargs):
+    # Connect with POST to base_url/debug/validate_prompt with `{'prompt': prompt, 'with_lang_detection': False}` `}`
+    import requests
+    url = base_url.rstrip('/') + '/debug/validate_prompt'
+    from icecream import ic; ic(url)
+    response: Response = requests.post(url, json={'prompt': prompt, 'ignore_lang_detection': True})
+    show_response(response)
+
+
+def get_model_list(base_url: str, **kwargs):
+    from icecream import ic; ic(base_url)
+    import requests
+    base_url = base_url.rstrip('/')
+    if base_url.endswith('/completions'):
+        base_url = base_url[:len]
+    url = base_url.rstrip('/') + '/models'
+    from icecream import ic; ic(url)
+    response: Response = requests.get(url)
+    show_response(response)
+
+
 if __name__ == "__main__":
     argparser = argparse.ArgumentParser(description="Call LLM APIs")
     # argparser.add_argument("--cohere_v1", "-1", action="store_true", help="Use Cohere v1 API")
@@ -337,6 +370,8 @@ if __name__ == "__main__":
     prompt_group.add_argument("--benign", "-B", action="store_const", const="benign", dest="prompt_template", help="Use default benign prompt")
     argparser.add_argument("--model", "-M", type=str, default=None, help="Model name to use")
     argparser.add_argument("--base_url", "-u", type=str, default=None, help="Base URL for the API")
+    argparser.add_argument("--list-models", "-L", action="store_true", help="get models instead of chatting")
+    argparser.add_argument("--model-info", "-I", action="store", type=str, help="get the specific model's information instead of chatting")
 
     args = argparser.parse_args()
 
@@ -360,10 +395,14 @@ if __name__ == "__main__":
         )
     # from icecream import ic; ic(call_api, prompt, args.stream, model, additional_params, api_key)
     print(f'Prompt: {prompt}\n---')
-    call_api(
-        prompt=prompt,
-        stream=args.stream,
-        model=model,
-        api_key=api_key,
-        **additional_params,
-    )
+    if args.list_models:
+        from icecream import ic; ic(additional_params)
+        get_model_list(**additional_params)
+    else:
+        call_api(
+            prompt=prompt,
+            stream=args.stream,
+            model=model,
+            api_key=api_key,
+            **additional_params,
+        )
