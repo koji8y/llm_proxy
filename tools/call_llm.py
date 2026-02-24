@@ -356,7 +356,7 @@ CALLERS = {
         api_key_envs=["ANTHROPIC_API_KEY"],
         adjust_params=lambda params, mandatory_args:
             params | (
-                dict()
+                dict(max_tokens=4096)
                 if mandatory_args.stream else
                 dict(max_tokens=2048)
             )
